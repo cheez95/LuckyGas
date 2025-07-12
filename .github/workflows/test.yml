@@ -1,0 +1,102 @@
+name: LuckyGas Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11']
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install playwright pytest-playwright pytest-cov
+    
+    - name: Install Playwright browsers
+      run: playwright install --with-deps chromium
+    
+    - name: Run tests
+      run: |
+        # Run API tests
+        pytest tests/e2e/test_api_endpoints.py -v
+        
+        # Run prediction tests
+        pytest tests/e2e/test_prediction_optimization.py -v
+        
+        # Run all E2E tests with coverage
+        pytest tests/e2e/ --cov=src/main/python --cov-report=xml
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  playwright-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install playwright pytest-playwright
+    
+    - name: Install Playwright
+      run: |
+        playwright install --with-deps
+    
+    - name: Start API server
+      run: |
+        # Initialize database
+        python src/main/python/core/database.py
+        
+        # Start server in background
+        uvicorn src.main.python.api.main:app --host 0.0.0.0 --port 8001 &
+        
+        # Wait for server
+        sleep 5
+    
+    - name: Run Playwright tests
+      run: |
+        pytest tests/e2e/ --browser chromium --tracing on
+    
+    - name: Upload test artifacts
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: playwright-traces
+        path: test-results/
