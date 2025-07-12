@@ -5,6 +5,10 @@ from sqlalchemy.pool import StaticPool
 from pathlib import Path
 import logging
 
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))
+
 from models.database_schema import Base
 
 logger = logging.getLogger(__name__)
