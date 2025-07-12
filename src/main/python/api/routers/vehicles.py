@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
 from datetime import datetime, date
 
-from ...core.database import get_db
-from ...models.database_schema import Vehicle, Delivery, Driver, VehicleType as DBVehicleType, DeliveryStatus
+from core.database import get_db
+from models.database_schema import Vehicle, Delivery, Driver, VehicleType as DBVehicleType, DeliveryStatus
 from ..schemas.vehicle import (
     VehicleCreate,
     VehicleUpdate,

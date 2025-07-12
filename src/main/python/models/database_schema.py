@@ -44,6 +44,25 @@ class Client(Base):
     short_name = Column(String(100))  # 客戶簡稱
     address = Column(String(500), nullable=False)  # 地址
     
+    # Contact info (added for API compatibility)
+    name = Column(String(100), nullable=True)  # 客戶名稱
+    # phone = Column(String(20), nullable=True)  # 電話號碼 - removed
+    contact_person = Column(String(50))  # 聯絡人
+    
+    # Business info
+    tax_id = Column(String(20))  # 統一編號
+    is_corporate = Column(Boolean, default=False)  # 是否為公司戶
+    
+    # Location
+    district = Column(String(20))  # 區域
+    latitude = Column(Float)  # 緯度
+    longitude = Column(Float)  # 經度
+    
+    # Preferences
+    delivery_time_preference = Column(String(100))  # 配送時間偏好
+    notes = Column(Text)  # 備註
+    is_active = Column(Boolean, default=True)  # 是否啟用
+    
     # 鋼瓶庫存
     cylinder_50kg = Column(Integer, default=0)
     cylinder_20kg_business = Column(Integer, default=0)  # 營20
@@ -91,7 +110,7 @@ class Client(Base):
     holiday = Column(String(50))  # 公休日
     
     # 使用資訊
-    status = Column(Integer, default=1)  # 狀態
+    # status = Column(Integer, default=1)  # 狀態 (replaced by is_active)
     monthly_delivery_volume = Column(Float, default=0)  # 月配送量
     gas_return_ratio = Column(Float, default=0)  # 退氣比例
     actual_purchase_kg = Column(Float, default=0)  # 實際購買公斤數
@@ -131,7 +150,7 @@ class Client(Base):
     
     __table_args__ = (
         Index('idx_client_area', 'area'),
-        Index('idx_client_status', 'status'),
+        Index('idx_client_is_active', 'is_active'),
     )
 
 

@@ -6,8 +6,8 @@ from sqlalchemy import or_, and_, func
 from datetime import datetime, date
 import json
 
-from ...core.database import get_db
-from ...models.database_schema import Driver, Delivery, Vehicle, DeliveryStatus
+from core.database import get_db
+from models.database_schema import Driver, Delivery, Vehicle, DeliveryStatus
 from ..schemas.driver import (
     DriverCreate,
     DriverUpdate,

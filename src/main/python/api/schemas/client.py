@@ -10,7 +10,6 @@ from .base import TimestampMixin, PaginatedResponse, TaiwanDateMixin
 class ClientBase(BaseModel):
     """Base client schema"""
     name: str = Field(..., min_length=1, max_length=100, description="客戶名稱")
-    phone: str = Field(..., pattern=r"^0[0-9]{9}$", description="電話號碼")
     address: str = Field(..., min_length=1, max_length=200, description="地址")
     contact_person: Optional[str] = Field(None, max_length=50, description="聯絡人")
     
@@ -26,16 +25,6 @@ class ClientBase(BaseModel):
     # Preferences
     delivery_time_preference: Optional[str] = Field(None, max_length=100, description="配送時間偏好")
     notes: Optional[str] = Field(None, max_length=500, description="備註")
-    
-    @field_validator('phone')
-    @classmethod
-    def validate_phone(cls, v: str) -> str:
-        """Validate Taiwan phone number format"""
-        if not v.startswith('0'):
-            raise ValueError('電話號碼必須以0開頭')
-        if len(v) != 10:
-            raise ValueError('電話號碼必須為10碼')
-        return v
 
 
 class ClientCreate(ClientBase):
@@ -46,7 +35,6 @@ class ClientCreate(ClientBase):
 class ClientUpdate(BaseModel):
     """Schema for updating a client"""
     name: Optional[str] = Field(None, min_length=1, max_length=100, description="客戶名稱")
-    phone: Optional[str] = Field(None, pattern=r"^0[0-9]{9}$", description="電話號碼")
     address: Optional[str] = Field(None, min_length=1, max_length=200, description="地址")
     contact_person: Optional[str] = Field(None, max_length=50, description="聯絡人")
     
@@ -94,7 +82,7 @@ class ClientListResponse(PaginatedResponse[ClientResponse]):
 
 class ClientSearchParams(BaseModel):
     """Search parameters for clients"""
-    keyword: Optional[str] = Field(None, description="搜尋關鍵字（名稱、電話、地址）")
+    keyword: Optional[str] = Field(None, description="搜尋關鍵字（名稱、地址）")
     district: Optional[str] = Field(None, description="區域")
     is_corporate: Optional[bool] = Field(None, description="是否為公司戶")
     is_active: Optional[bool] = Field(default=True, description="是否啟用")

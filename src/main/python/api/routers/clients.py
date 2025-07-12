@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
 from datetime import datetime
 
-from ...core.database import get_db
-from ...models.database_schema import Client, Delivery
+from core.database import get_db
+from models.database_schema import Client, Delivery
 from ..schemas.client import (
     ClientCreate,
     ClientUpdate,
@@ -32,12 +32,14 @@ async def get_clients(
     pagination: PaginationParams = Depends(),
     # Search params
     search: ClientSearchParams = Depends(),
+    # Additional filters
+    area: Optional[str] = Query(None, description="區域篩選（area欄位）"),
     db: Session = Depends(get_db)
 ):
     """
     取得客戶列表，支援分頁、搜尋與篩選
     
-    - **keyword**: 搜尋關鍵字（客戶名稱、電話、地址）
+    - **keyword**: 搜尋關鍵字（客戶名稱、地址）
     - **district**: 區域篩選
     - **is_corporate**: 是否為公司戶
     - **is_active**: 是否啟用
@@ -49,13 +51,16 @@ async def get_clients(
     
     # Apply filters
     if search.keyword:
-        keyword_filter = or_(
-            Client.name.ilike(f"%{search.keyword}%"),
-            Client.phone.ilike(f"%{search.keyword}%"),
-            Client.address.ilike(f"%{search.keyword}%"),
-            Client.contact_person.ilike(f"%{search.keyword}%")
-        )
-        query = query.filter(keyword_filter)
+        keyword_filters = []
+        if hasattr(Client, 'name'):
+            keyword_filters.append(Client.name.ilike(f"%{search.keyword}%"))
+        if hasattr(Client, 'address'):
+            keyword_filters.append(Client.address.ilike(f"%{search.keyword}%"))
+        if hasattr(Client, 'contact_person'):
+            keyword_filters.append(Client.contact_person.ilike(f"%{search.keyword}%"))
+        
+        if keyword_filters:
+            query = query.filter(or_(*keyword_filters))
     
     if search.district:
         query = query.filter(Client.district == search.district)
@@ -65,6 +70,10 @@ async def get_clients(
     
     if search.is_active is not None:
         query = query.filter(Client.is_active == search.is_active)
+    
+    # Handle area parameter (for backward compatibility)
+    if area:
+        query = query.filter(Client.area == area)
     
     # Get total count
     total = query.count()
@@ -143,18 +152,9 @@ async def create_client(client: ClientCreate, db: Session = Depends(get_db)):
     新增客戶資料
     
     - **name**: 客戶名稱（必填）
-    - **phone**: 電話號碼（必填，格式：0912345678）
     - **address**: 地址（必填）
     - **tax_id**: 統一編號（選填，8碼數字）
     """
-    # Check if phone already exists
-    existing_client = db.query(Client).filter(Client.phone == client.phone).first()
-    if existing_client:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="該電話號碼已被使用"
-        )
-    
     # Check if tax_id already exists (if provided)
     if client.tax_id:
         existing_tax = db.query(Client).filter(Client.tax_id == client.tax_id).first()
@@ -164,9 +164,17 @@ async def create_client(client: ClientCreate, db: Session = Depends(get_db)):
                 detail="該統一編號已被使用"
             )
     
+    # Generate client code
+    import uuid
+    client_code = f"C{str(uuid.uuid4())[:8].upper()}"
+    
     # Create new client
+    client_data = client.model_dump()
     db_client = Client(
-        **client.model_dump(),
+        **client_data,
+        client_code=client_code,
+        invoice_title=client_data.get('name', ''),  # Use name as invoice title
+        short_name=client_data.get('name', '')[:50] if client_data.get('name') else '',  # Short version
         created_at=datetime.now(),
         updated_at=datetime.now()
     )
@@ -197,18 +205,6 @@ async def update_client(
     
     # Update only provided fields
     update_data = client_update.model_dump(exclude_unset=True)
-    
-    # Check phone uniqueness if updating
-    if "phone" in update_data and update_data["phone"] != client.phone:
-        existing_phone = db.query(Client).filter(
-            Client.phone == update_data["phone"],
-            Client.id != client_id
-        ).first()
-        if existing_phone:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="該電話號碼已被使用"
-            )
     
     # Check tax_id uniqueness if updating
     if "tax_id" in update_data and update_data["tax_id"] != client.tax_id:
@@ -299,35 +295,3 @@ async def get_districts(db: Session = Depends(get_db)):
     return [d[0] for d in districts if d[0]]
 
 
-@router.get("/search/by-phone", response_model=Optional[ClientResponse], summary="依電話搜尋客戶")
-async def search_by_phone(
-    phone: str = Query(..., description="電話號碼"),
-    db: Session = Depends(get_db)
-):
-    """
-    依電話號碼搜尋客戶
-    """
-    client = db.query(Client).filter(
-        Client.phone == phone,
-        Client.is_active == True
-    ).first()
-    
-    if not client:
-        return None
-    
-    # Get statistics
-    total_orders = db.query(func.count(Delivery.id)).filter(
-        Delivery.client_id == client.id
-    ).scalar() or 0
-    
-    last_order = db.query(Delivery).filter(
-        Delivery.client_id == client.id
-    ).order_by(Delivery.created_at.desc()).first()
-    
-    client_data = {
-        **client.__dict__,
-        "total_orders": total_orders,
-        "last_order_date": last_order.created_at if last_order else None
-    }
-    
-    return ClientResponse.model_validate(client_data)

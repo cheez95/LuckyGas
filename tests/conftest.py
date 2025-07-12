@@ -88,22 +88,18 @@ def authenticated_page(page: Page):
 @pytest.fixture
 def test_client_data():
     """Sample client data for testing"""
+    import time
+    # Use timestamp to ensure unique tax_id
+    unique_suffix = str(int(time.time()))[-8:]
     return {
-        "client_code": "TEST001",
-        "invoice_title": "測試餐廳",
-        "short_name": "測試店",
+        "name": f"測試餐廳_{unique_suffix}",
         "address": "臺東市中正路100號",
-        "phone": "089-123456",
-        "tax_id": "12345678",
-        "area": "A-瑞光",
-        "cylinder_20kg": 2,
-        "cylinder_16kg": 1,
-        "payment_method": "monthly",
-        "daily_usage_avg": 5.5,
-        "time_windows": [
-            {"start": 9, "end": 12},
-            {"start": 14, "end": 18}
-        ]
+        "contact_person": "張經理",
+        "tax_id": unique_suffix,  # Unique 8-digit tax_id
+        "is_corporate": True,
+        "district": "瑞光區",
+        "delivery_time_preference": "09:00-12:00",
+        "notes": "測試客戶資料"
     }
 
 

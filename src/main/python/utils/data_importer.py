@@ -51,6 +51,14 @@ class ExcelDataImporter:
                 client.short_name = str(row['客戶簡稱']) if pd.notna(row['客戶簡稱']) else ''
                 client.address = str(row['地址']) if pd.notna(row['地址']) else ''
                 
+                # New fields for API compatibility (use existing data as defaults)
+                client.name = client.invoice_title  # Use invoice title as name
+                # client.phone = str(row['電話']) if pd.notna(row.get('電話')) else ''  # Phone field removed
+                client.contact_person = str(row['聯絡人']) if pd.notna(row.get('聯絡人')) else ''
+                client.tax_id = str(row['統一編號']) if pd.notna(row.get('統一編號')) else None
+                client.is_corporate = pd.notna(row.get('統一編號'))  # Has tax ID = corporate
+                client.district = str(row['區域']) if pd.notna(row.get('區域')) else None
+                
                 # 鋼瓶庫存
                 client.cylinder_50kg = int(row['50KG']) if pd.notna(row['50KG']) else 0
                 client.cylinder_20kg_business = int(row['營20']) if pd.notna(row['營20']) else 0
@@ -109,7 +117,9 @@ class ExcelDataImporter:
                 client.holiday = str(row['公休日']) if pd.notna(row['公休日']) else None
                 
                 # 使用資訊
-                client.status = int(row['狀態']) if pd.notna(row['狀態']) else 1
+                # client.status = int(row['狀態']) if pd.notna(row['狀態']) else 1  # Replaced by is_active
+                status_value = int(row['狀態']) if pd.notna(row['狀態']) else 1
+                client.is_active = status_value == 1  # Convert status to boolean
                 client.monthly_delivery_volume = float(row['月配送量']) if pd.notna(row['月配送量']) else 0
                 client.gas_return_ratio = float(row['退氣比例']) if pd.notna(row['退氣比例']) else 0
                 client.actual_purchase_kg = float(row['實際購買公斤數']) if pd.notna(row['實際購買公斤數']) else 0

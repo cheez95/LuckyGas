@@ -24,7 +24,7 @@ pytest-asyncio==0.24.0
 httpx==0.28.1
 playwright==1.53.0
 pytest-playwright==0.7.0
-pytest-cov==7.0.0
+pytest-cov==6.0.0
 
 # Optional: For Google Maps integration
 # googlemaps==4.10.0

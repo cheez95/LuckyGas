@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
 from datetime import datetime, date, timedelta
 
-from ...core.database import get_db
-from ...models.database_schema import Delivery, Client, Driver, Vehicle, DeliveryStatus
+from core.database import get_db
+from models.database_schema import Delivery, Client, Driver, Vehicle, DeliveryStatus
 from ..schemas.delivery import (
     DeliveryCreate,
     DeliveryUpdate,
@@ -150,7 +150,7 @@ async def get_deliveries(
             "payment_method": "cash",  # Default
             "payment_status": "pending",  # Default
             "client_name": client.invoice_title,
-            "client_phone": client.phone if hasattr(client, 'phone') else None,
+            "client_phone": None,
             "driver_name": driver.name if driver else None,
             "vehicle_plate": vehicle.plate_number if vehicle else None,
             "scheduled_time_slot": f"{delivery.scheduled_time_start}-{delivery.scheduled_time_end}" if delivery.scheduled_time_start else None,
@@ -209,7 +209,7 @@ async def get_delivery(delivery_id: int, db: Session = Depends(get_db)):
         "payment_method": "cash",
         "payment_status": "pending",
         "client_name": client.invoice_title,
-        "client_phone": client.phone if hasattr(client, 'phone') else None,
+        "client_phone": None,
         "driver_name": driver.name if driver else None,
         "vehicle_plate": vehicle.plate_number if vehicle else None,
         "scheduled_time_slot": f"{delivery.scheduled_time_start}-{delivery.scheduled_time_end}" if delivery.scheduled_time_start else None,
@@ -279,7 +279,7 @@ async def create_delivery(delivery: DeliveryCreate, db: Session = Depends(get_db
         "payment_method": delivery.payment_method,
         "payment_status": "pending",
         "client_name": client.invoice_title,
-        "client_phone": client.phone if hasattr(client, 'phone') else None,
+        "client_phone": None,
         "scheduled_time_slot": delivery.scheduled_time_slot,
         "empty_cylinders_to_return": delivery.empty_cylinders_to_return,
         "empty_cylinders_returned": 0,
@@ -406,7 +406,7 @@ async def update_delivery(
         "payment_status": update_data.get("payment_status", "pending"),
         "paid_at": update_data.get("paid_at"),
         "client_name": client.invoice_title,
-        "client_phone": client.phone if hasattr(client, 'phone') else None,
+        "client_phone": None,
         "driver_name": driver.name if driver else None,
         "vehicle_plate": vehicle.plate_number if vehicle else None,
         "scheduled_time_slot": f"{delivery.scheduled_time_start}-{delivery.scheduled_time_end}" if delivery.scheduled_time_start else None,

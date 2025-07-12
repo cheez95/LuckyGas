@@ -66,8 +66,11 @@ start_api_server() {
     # Initialize test database
     python src/main/python/core/database.py
     
-    # Start server in background
-    uvicorn src.main.python.api.main:app --host 0.0.0.0 --port 8001 &
+    # Set PYTHONPATH to include the src/main/python directory
+    export PYTHONPATH="$PWD/src/main/python:$PYTHONPATH"
+    
+    # Start server in background using the absolute imports
+    uvicorn api.main:app --host 0.0.0.0 --port 8001 &
     API_PID=$!
     
     # Wait for server to start

@@ -46,7 +46,7 @@ def test_api_docs_available(page: Page, api_server_simple: str):
     # Swagger UI
     response = page.goto(f"{api_server_simple}/docs")
     assert response.ok
-    assert page.title() == "FastAPI - Swagger UI"
+    assert page.title() == "LuckyGas API - Swagger UI"
     
     # ReDoc
     response = page.goto(f"{api_server_simple}/redoc")

@@ -34,11 +34,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 路由註冊 - 注意這裡不再加 /api 前綴，因為 router 本身已經定義了前綴
-app.include_router(clients_router)
-app.include_router(deliveries_router)
-app.include_router(drivers_router)
-app.include_router(vehicles_router)
+# 路由註冊 - 加上 /api 前綴
+app.include_router(clients_router, prefix="/api")
+app.include_router(deliveries_router, prefix="/api")
+app.include_router(drivers_router, prefix="/api")
+app.include_router(vehicles_router, prefix="/api")
 
 # 根路徑
 @app.get("/")
