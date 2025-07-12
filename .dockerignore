@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+*.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+tests/
+test_*.py
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+CLAUDE.md
+docs/
+*.md
+
+# Development
+*.log
+*.sqlite
+*.db
+.env
+.env.*
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Local data (should use volumes)
+src/data/*.db
+output/
+
+# Development scripts
+run_tests.sh
+start_api.sh
+pytest.ini
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore

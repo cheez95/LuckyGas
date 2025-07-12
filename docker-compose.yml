@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: luckygas-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:////app/src/data/luckygas.db
+      # For PostgreSQL production:
+      # - DATABASE_URL=postgresql://user:password@db:5432/luckygas
+    volumes:
+      # Mount data directory for persistent storage
+      - ./src/data:/app/src/data
+      # Mount logs directory
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - luckygas-network
+
+  # Optional: PostgreSQL for production
+  # db:
+  #   image: postgres:15-alpine
+  #   container_name: luckygas-db
+  #   environment:
+  #     - POSTGRES_USER=luckygas
+  #     - POSTGRES_PASSWORD=changeme
+  #     - POSTGRES_DB=luckygas
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+  #   networks:
+  #     - luckygas-network
+
+networks:
+  luckygas-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
