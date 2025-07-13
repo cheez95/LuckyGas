@@ -1,49 +1,146 @@
 version: '3.8'
 
 services:
+  # API 服務
   api:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: luckygas-api
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=sqlite:////app/src/data/luckygas.db
-      # For PostgreSQL production:
-      # - DATABASE_URL=postgresql://user:password@db:5432/luckygas
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-luckygas}
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-here}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,https://luckygas.com}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-jwt-secret-key}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - luckygas-network
     volumes:
-      # Mount data directory for persistent storage
-      - ./src/data:/app/src/data
-      # Mount logs directory
       - ./logs:/app/logs
-    restart: unless-stopped
+      - ./uploads:/app/uploads
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # PostgreSQL 資料庫
+  db:
+    image: postgres:15-alpine
+    container_name: luckygas-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${DB_NAME:-luckygas}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --locale=zh_TW.UTF-8
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backup:/backup
+    ports:
+      - "5432:5432"
     networks:
       - luckygas-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-luckygas}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  # Optional: PostgreSQL for production
-  # db:
-  #   image: postgres:15-alpine
-  #   container_name: luckygas-db
-  #   environment:
-  #     - POSTGRES_USER=luckygas
-  #     - POSTGRES_PASSWORD=changeme
-  #     - POSTGRES_DB=luckygas
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   restart: unless-stopped
-  #   networks:
-  #     - luckygas-network
+  # Redis 快取服務
+  redis:
+    image: redis:7-alpine
+    container_name: luckygas-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis-password}
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - luckygas-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
+  # Nginx 反向代理
+  nginx:
+    image: nginx:alpine
+    container_name: luckygas-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./static:/usr/share/nginx/static:ro
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      - api
+    networks:
+      - luckygas-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # 備份服務（可選）
+  backup:
+    image: postgres:15-alpine
+    container_name: luckygas-backup
+    restart: "no"
+    environment:
+      - PGPASSWORD=${DB_PASSWORD:-postgres}
+    volumes:
+      - ./backup:/backup
+    networks:
+      - luckygas-network
+    entrypoint: |
+      bash -c 'while true; do
+        echo "Performing database backup..."
+        pg_dump -h db -U ${DB_USER:-postgres} -d ${DB_NAME:-luckygas} > /backup/luckygas_$$(date +%Y%m%d_%H%M%S).sql
+        echo "Backup completed."
+        sleep 86400
+      done'
+    depends_on:
+      db:
+        condition: service_healthy
+
+# 網路配置
 networks:
   luckygas-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
+# 持久化儲存
 volumes:
-  postgres_data:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  nginx-logs:
+    driver: local

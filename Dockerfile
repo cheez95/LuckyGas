@@ -1,52 +1,32 @@
-# Production Dockerfile for LuckyGas API
 FROM python:3.9-slim
 
-# Set working directory
+# 設定工作目錄
 WORKDIR /app
 
-# Install system dependencies for production
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# 安裝系統依賴
+RUN apt-get update && apt-get install -y \
     gcc \
-    python3-dev \
-    libpq-dev \
-    curl \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file
+# 複製需求檔案
 COPY requirements.txt .
 
-# Install Python dependencies
+# 安裝 Python 套件
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy entire project
-COPY . .
+# 複製應用程式碼
+COPY src/ ./src/
+COPY data/ ./data/
 
-# Set Python path to include src directory
-ENV PYTHONPATH=/app/src/main/python:$PYTHONPATH
+# 建立必要目錄
+RUN mkdir -p /app/logs /app/uploads
 
-# Create non-root user for security
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+# 設定 Python 路徑
+ENV PYTHONPATH=/app
 
-# Switch to non-root user
-USER appuser
-
-# Expose port 8000
+# 暴露埠號
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-# Run with gunicorn for production
-# Using 4 workers (adjust based on your CPU cores: 2 * CPU cores + 1)
-# Using uvicorn workers for async support
-CMD ["gunicorn", \
-     "api.main:app", \
-     "--bind", "0.0.0.0:8000", \
-     "--workers", "4", \
-     "--worker-class", "uvicorn.workers.UvicornWorker", \
-     "--timeout", "120", \
-     "--keep-alive", "5", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-", \
-     "--log-level", "info"]
+# 啟動命令
+CMD ["uvicorn", "src.main.python.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
