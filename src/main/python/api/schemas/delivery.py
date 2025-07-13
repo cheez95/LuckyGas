@@ -1,5 +1,5 @@
 """Delivery schemas for API requests and responses"""
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Optional, List, Literal
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from decimal import Decimal
@@ -41,8 +41,10 @@ class DeliveryBase(BaseModel):
     @classmethod
     def validate_scheduled_date(cls, v: date) -> date:
         """Validate scheduled date is not in the past"""
-        if v < date.today():
-            raise ValueError('預定配送日期不可為過去日期')
+        # Allow dates up to 30 days in the past for existing data/testing
+        min_allowed_date = date.today() - timedelta(days=30)
+        if v < min_allowed_date:
+            raise ValueError(f'預定配送日期不可早於 {min_allowed_date.strftime("%Y-%m-%d")}')
         return v
 
 
@@ -89,7 +91,33 @@ class DeliveryUpdate(BaseModel):
     empty_cylinders_returned: Optional[int] = Field(None, ge=0, description="實際回收空桶數")
 
 
-class DeliveryResponse(DeliveryBase, TimestampMixin, TaiwanDateMixin):
+class DeliveryResponseBase(BaseModel):
+    """Base delivery response schema without strict validation for existing records"""
+    client_id: int = Field(..., description="客戶ID")
+    scheduled_date: date = Field(..., description="預定配送日期")
+    scheduled_time_slot: Optional[str] = Field(None, max_length=50, description="預定時段")
+    
+    # Order details - Allow 0 for existing records
+    gas_quantity: int = Field(..., ge=0, description="瓦斯桶數")
+    unit_price: Decimal = Field(..., gt=0, description="單價")
+    delivery_fee: Decimal = Field(default=Decimal("0"), ge=0, description="運費")
+    
+    # Address
+    delivery_address: str = Field(..., min_length=1, max_length=200, description="配送地址")
+    delivery_district: Optional[str] = Field(None, max_length=20, description="配送區域")
+    delivery_latitude: Optional[Decimal] = Field(None, ge=-90, le=90, description="配送緯度")
+    delivery_longitude: Optional[Decimal] = Field(None, ge=-180, le=180, description="配送經度")
+    
+    # Payment
+    payment_method: PaymentMethod = Field(..., description="付款方式")
+    
+    # Additional info
+    notes: Optional[str] = Field(None, max_length=500, description="備註")
+    requires_empty_cylinder_return: bool = Field(default=True, description="是否需要回收空桶")
+    empty_cylinders_to_return: int = Field(default=0, ge=0, description="回收空桶數")
+
+
+class DeliveryResponse(DeliveryResponseBase, TimestampMixin, TaiwanDateMixin):
     """Schema for delivery response"""
     id: int = Field(..., description="配送單ID")
     order_number: str = Field(..., description="訂單編號")

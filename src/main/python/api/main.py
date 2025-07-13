@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import sys
 from pathlib import Path
@@ -48,6 +50,14 @@ async def root():
         "version": "1.0.0",
         "status": "運行中"
     }
+
+# 管理介面
+@app.get("/admin")
+async def admin():
+    return FileResponse(str(Path(__file__).parent.parent / "web" / "index.html"))
+
+# 靜態文件
+app.mount("/static", StaticFiles(directory=str(Path(__file__).parent.parent / "web")), name="static")
 
 # 健康檢查
 @app.get("/health")

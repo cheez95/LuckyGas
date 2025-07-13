@@ -1,6 +1,6 @@
 """Client API Router - 客戶管理 API"""
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
 from datetime import datetime
@@ -117,7 +117,10 @@ async def get_clients(
 
 
 @router.get("/{client_id}", response_model=ClientResponse, summary="取得客戶詳細資料")
-async def get_client(client_id: int, db: Session = Depends(get_db)):
+async def get_client(
+    client_id: int = Path(..., description="客戶ID", example=1),
+    db: Session = Depends(get_db)
+):
     """
     取得特定客戶的詳細資料
     """

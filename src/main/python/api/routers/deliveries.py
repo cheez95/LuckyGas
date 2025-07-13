@@ -75,8 +75,7 @@ async def get_deliveries(
     if search.keyword:
         keyword_filter = or_(
             Client.name.ilike(f"%{search.keyword}%"),
-            Client.address.ilike(f"%{search.keyword}%"),
-            Delivery.delivery_address.ilike(f"%{search.keyword}%") if hasattr(Delivery, 'delivery_address') else False
+            Client.address.ilike(f"%{search.keyword}%")
         )
         query = query.filter(keyword_filter)
     
@@ -97,7 +96,7 @@ async def get_deliveries(
         query = query.filter(Delivery.scheduled_date <= search.scheduled_date_to)
     
     if search.district:
-        query = query.filter(Client.area == search.district)
+        query = query.filter(Client.district == search.district)
     
     # Get total count
     total = query.count()
@@ -140,16 +139,17 @@ async def get_deliveries(
         
         delivery_data = {
             **delivery.__dict__,
+            "status": delivery.status.value if hasattr(delivery.status, 'value') else str(delivery.status).replace('DeliveryStatus.', '').lower(),
             "order_number": generate_order_number(db) if not hasattr(delivery, 'order_number') else delivery.order_number,
             "gas_quantity": total_cylinders,
             "unit_price": unit_price,
             "delivery_fee": delivery_fee,
             "total_amount": total_amount,
             "delivery_address": client.address,
-            "delivery_district": client.area,
+            "delivery_district": client.district,
             "payment_method": "cash",  # Default
             "payment_status": "pending",  # Default
-            "client_name": client.invoice_title,
+            "client_name": client.name if client.name else client.invoice_title,
             "client_phone": None,
             "driver_name": driver.name if driver else None,
             "vehicle_plate": vehicle.plate_number if vehicle else None,
@@ -199,16 +199,17 @@ async def get_delivery(delivery_id: int, db: Session = Depends(get_db)):
     
     delivery_data = {
         **delivery.__dict__,
+        "status": delivery.status.value if hasattr(delivery.status, 'value') else delivery.status,
         "order_number": generate_order_number(db) if not hasattr(delivery, 'order_number') else delivery.order_number,
         "gas_quantity": total_cylinders,
         "unit_price": unit_price,
         "delivery_fee": delivery_fee,
         "total_amount": total_amount,
         "delivery_address": client.address,
-        "delivery_district": client.area,
+        "delivery_district": client.district,
         "payment_method": "cash",
         "payment_status": "pending",
-        "client_name": client.invoice_title,
+        "client_name": client.name if client.name else client.invoice_title,
         "client_phone": None,
         "driver_name": driver.name if driver else None,
         "vehicle_plate": vehicle.plate_number if vehicle else None,
@@ -267,6 +268,7 @@ async def create_delivery(delivery: DeliveryCreate, db: Session = Depends(get_db
     
     delivery_data = {
         **db_delivery.__dict__,
+        "status": db_delivery.status.value if hasattr(db_delivery.status, 'value') else db_delivery.status,
         "order_number": generate_order_number(db),
         "gas_quantity": total_cylinders,
         "unit_price": unit_price,
