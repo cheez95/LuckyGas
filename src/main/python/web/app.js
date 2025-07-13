@@ -347,11 +347,15 @@ function renderClientsTable(clients) {
         const row = document.createElement('tr');
         row.className = 'hover:bg-gray-50 transition-colors';
         row.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm">${client.id}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                <div class="text-gray-900">${client.client_code || client.id}</div>
+                <div class="text-xs text-gray-500">ID: ${client.id}</div>
+            </td>
             <td class="px-6 py-4 whitespace-nowrap">
                 <div>
-                    <div class="font-medium">${client.name || client.invoice_title || '-'}</div>
-                    ${client.contact_person ? `<div class="text-sm text-gray-500">${client.contact_person}</div>` : ''}
+                    <div class="font-medium">${client.name || '-'}</div>
+                    <div class="text-sm text-gray-600">${client.invoice_title || '-'}</div>
+                    ${client.contact_person ? `<div class="text-xs text-gray-500">${client.contact_person}</div>` : ''}
                 </div>
             </td>
             <td class="px-6 py-4 text-sm">${client.address}</td>
@@ -900,15 +904,15 @@ async function editClient(clientId) {
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">客戶編號</label>
-                        <input type="text" name="client_code" value="${client.client_code}" class="w-full px-3 py-2 border rounded-md" required>
+                        <input type="text" name="client_code" value="${client.client_code || ''}" class="w-full px-3 py-2 border rounded-md bg-gray-100" readonly>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">客戶名稱</label>
+                        <input type="text" name="name" value="${client.name || ''}" class="w-full px-3 py-2 border rounded-md" required>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">發票抬頭</label>
-                        <input type="text" name="invoice_title" value="${client.invoice_title}" class="w-full px-3 py-2 border rounded-md" required>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">客戶簡稱</label>
-                        <input type="text" name="short_name" value="${client.short_name || ''}" class="w-full px-3 py-2 border rounded-md">
+                        <input type="text" name="invoice_title" value="${client.invoice_title || ''}" class="w-full px-3 py-2 border rounded-md">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">聯絡人</label>
@@ -1144,5 +1148,202 @@ function createEditModal(title, content) {
 function closeModal(modal) {
     if (modal) {
         modal.remove();
+    }
+}
+
+// Sorting functions
+function sortClients(column) {
+    if (clientFilters.sortBy === column) {
+        clientFilters.sortOrder = clientFilters.sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+        clientFilters.sortBy = column;
+        clientFilters.sortOrder = 'asc';
+    }
+    loadClients(1);
+}
+
+function sortDeliveries(value) {
+    if (value) {
+        const [column, order] = value.split('-');
+        deliveryFilters.sortBy = column;
+        deliveryFilters.sortOrder = order;
+        loadDeliveries(1);
+    }
+}
+
+// Additional utility functions
+async function updateDeliveryStatus(deliveryId, currentStatus) {
+    const statusFlow = {
+        'pending': 'assigned',
+        'assigned': 'in_progress',
+        'in_progress': 'completed'
+    };
+    
+    const nextStatus = statusFlow[currentStatus];
+    if (!nextStatus) {
+        showNotification('此配送單已完成或取消', 'info');
+        return;
+    }
+    
+    if (confirm(`確定要將狀態更新為「${getStatusText(nextStatus)}」嗎？`)) {
+        try {
+            const response = await fetch(`${API_BASE}/deliveries/${deliveryId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: nextStatus.toUpperCase() })
+            });
+            
+            if (response.ok) {
+                showNotification('配送狀態已更新', 'success');
+                loadDeliveries(currentDeliveryPage);
+            } else {
+                throw new Error('Update failed');
+            }
+        } catch (error) {
+            showNotification('更新失敗', 'error');
+        }
+    }
+}
+
+function getStatusText(status) {
+    const statusMap = {
+        'pending': '待處理',
+        'assigned': '已指派',
+        'in_progress': '配送中',
+        'completed': '已完成',
+        'cancelled': '已取消'
+    };
+    return statusMap[status.toLowerCase()] || status;
+}
+
+// Assign delivery to driver
+async function assignDelivery(deliveryId) {
+    // Load available drivers and vehicles
+    const [driversRes, vehiclesRes] = await Promise.all([
+        fetch(`${API_BASE}/drivers?is_available=true`),
+        fetch(`${API_BASE}/vehicles?is_active=true`)
+    ]);
+    
+    const drivers = await driversRes.json();
+    const vehicles = await vehiclesRes.json();
+    
+    const availableDrivers = drivers.items || [];
+    const availableVehicles = vehicles.items || [];
+    
+    if (availableDrivers.length === 0 || availableVehicles.length === 0) {
+        showNotification('沒有可用的司機或車輛', 'error');
+        return;
+    }
+    
+    const modalContent = `
+        <form id="assign-delivery-form">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">選擇司機</label>
+                    <select name="driver_id" class="w-full px-3 py-2 border rounded-md" required>
+                        <option value="">請選擇司機</option>
+                        ${availableDrivers.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">選擇車輛</label>
+                    <select name="vehicle_id" class="w-full px-3 py-2 border rounded-md" required>
+                        <option value="">請選擇車輛</option>
+                        ${availableVehicles.map(v => `<option value="${v.id}">${v.plate_number} - ${v.vehicle_type}</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+        </form>
+    `;
+    
+    const modal = createEditModal('指派配送單', modalContent);
+    
+    modal.querySelector('#confirm-btn').addEventListener('click', async () => {
+        const form = modal.querySelector('#assign-delivery-form');
+        const formData = new FormData(form);
+        
+        try {
+            const response = await fetch(`${API_BASE}/deliveries/${deliveryId}/assign`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    driver_id: parseInt(formData.get('driver_id')),
+                    vehicle_id: parseInt(formData.get('vehicle_id'))
+                })
+            });
+            
+            if (response.ok) {
+                showNotification('配送單已指派', 'success');
+                closeModal(modal);
+                loadDeliveries(currentDeliveryPage);
+            } else {
+                throw new Error('Assign failed');
+            }
+        } catch (error) {
+            showNotification('指派失敗', 'error');
+        }
+    });
+}
+
+// View delivery details
+async function viewDelivery(deliveryId) {
+    try {
+        const response = await fetch(`${API_BASE}/deliveries/${deliveryId}`);
+        const delivery = await response.json();
+        
+        const modalContent = `
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <p class="text-sm text-gray-600">配送單號</p>
+                    <p class="font-medium">${delivery.order_number}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">狀態</p>
+                    <p class="font-medium">${getStatusText(delivery.status)}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">客戶名稱</p>
+                    <p class="font-medium">${delivery.client_name || '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">配送日期</p>
+                    <p class="font-medium">${formatDate(delivery.scheduled_date)}</p>
+                </div>
+                <div class="col-span-2">
+                    <p class="text-sm text-gray-600">配送地址</p>
+                    <p class="font-medium">${delivery.delivery_address}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">瓦斯數量</p>
+                    <p class="font-medium">${delivery.gas_quantity} 桶</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">總金額</p>
+                    <p class="font-medium">NT$ ${delivery.total_amount}</p>
+                </div>
+                ${delivery.driver_name ? `
+                <div>
+                    <p class="text-sm text-gray-600">司機</p>
+                    <p class="font-medium">${delivery.driver_name}</p>
+                </div>
+                ` : ''}
+                ${delivery.vehicle_plate ? `
+                <div>
+                    <p class="text-sm text-gray-600">車輛</p>
+                    <p class="font-medium">${delivery.vehicle_plate}</p>
+                </div>
+                ` : ''}
+                ${delivery.notes ? `
+                <div class="col-span-2">
+                    <p class="text-sm text-gray-600">備註</p>
+                    <p class="font-medium">${delivery.notes}</p>
+                </div>
+                ` : ''}
+            </div>
+        `;
+        
+        showModal('配送單詳細資料', modalContent);
+    } catch (error) {
+        showNotification('載入配送單資料失敗', 'error');
     }
 }
