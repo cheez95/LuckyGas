@@ -86,20 +86,30 @@ async def get_deliveries(
         query = query.filter(Delivery.driver_id == search.driver_id)
     
     if search.status:
-        try:
-            # Try to get enum by name (for uppercase values)
-            status_enum = DeliveryStatus[search.status.upper()]
-        except KeyError:
-            # Try to get enum by value (for existing lowercase values in DB)
-            status_enum = None
-            for member in DeliveryStatus:
-                if member.value.lower() == search.status.lower():
-                    status_enum = member
-                    break
-            if not status_enum:
-                # Default to the uppercase version
+        # Normalize the status to lowercase for comparison
+        normalized_status = search.status.lower()
+        
+        # Map common variations to enum values
+        status_map = {
+            'pending': DeliveryStatus.PENDING,
+            'assigned': DeliveryStatus.ASSIGNED,
+            'in_progress': DeliveryStatus.IN_PROGRESS,
+            'in progress': DeliveryStatus.IN_PROGRESS,
+            'completed': DeliveryStatus.COMPLETED,
+            'cancelled': DeliveryStatus.CANCELLED,
+            'canceled': DeliveryStatus.CANCELLED  # Alternative spelling
+        }
+        
+        if normalized_status in status_map:
+            query = query.filter(Delivery.status == status_map[normalized_status])
+        else:
+            # Try uppercase enum name as fallback
+            try:
                 status_enum = DeliveryStatus[search.status.upper()]
-        query = query.filter(Delivery.status == status_enum)
+                query = query.filter(Delivery.status == status_enum)
+            except KeyError:
+                # Skip invalid status values
+                pass
     
     if search.scheduled_date_from:
         query = query.filter(Delivery.scheduled_date >= search.scheduled_date_from)
@@ -332,23 +342,34 @@ async def update_delivery(
     
     # Handle status update
     if "status" in update_data:
-        try:
-            # Try to get enum by name (for uppercase values)
-            delivery.status = DeliveryStatus[update_data["status"].upper()]
-        except KeyError:
-            # Try to get enum by value
-            status_enum = None
-            for member in DeliveryStatus:
-                if member.value.lower() == update_data["status"].lower():
-                    status_enum = member
-                    break
-            if status_enum:
-                delivery.status = status_enum
-            else:
+        # Normalize the status to lowercase for comparison
+        normalized_status = update_data["status"].lower()
+        
+        # Map common variations to enum values
+        status_map = {
+            'pending': DeliveryStatus.PENDING,
+            'assigned': DeliveryStatus.ASSIGNED,
+            'in_progress': DeliveryStatus.IN_PROGRESS,
+            'in progress': DeliveryStatus.IN_PROGRESS,
+            'completed': DeliveryStatus.COMPLETED,
+            'cancelled': DeliveryStatus.CANCELLED,
+            'canceled': DeliveryStatus.CANCELLED
+        }
+        
+        if normalized_status in status_map:
+            delivery.status = status_map[normalized_status]
+        else:
+            # Try uppercase enum name as fallback
+            try:
                 delivery.status = DeliveryStatus[update_data["status"].upper()]
+            except KeyError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid status: {update_data['status']}"
+                )
         
         # If marking as completed, set delivered_at
-        if update_data["status"] == "completed" and not delivery.actual_delivery_time:
+        if normalized_status == "completed" and not delivery.actual_delivery_time:
             delivery.actual_delivery_time = update_data.get("delivered_at", datetime.now())
     
     # Handle driver assignment
@@ -575,7 +596,15 @@ async def get_today_summary(db: Session = Depends(get_db)):
     }
     
     for status, count in status_counts:
-        status_summary[status.value.lower()] = count
+        # Handle both enum and string values from database
+        if hasattr(status, 'value'):
+            status_key = status.value
+        else:
+            status_key = str(status).lower()
+        
+        # Ensure lowercase for consistency
+        if status_key.lower() in status_summary:
+            status_summary[status_key.lower()] = count
     
     # Driver workload
     driver_counts = db.query(

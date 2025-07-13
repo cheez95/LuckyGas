@@ -47,8 +47,22 @@ function setupDateDefaults() {
     const lastWeek = new Date(today);
     lastWeek.setDate(lastWeek.getDate() - 7);
     
-    document.getElementById('delivery-date-from').value = lastWeek.toISOString().split('T')[0];
-    document.getElementById('delivery-date-to').value = tomorrow.toISOString().split('T')[0];
+    const fromDate = lastWeek.toISOString().split('T')[0];
+    const toDate = tomorrow.toISOString().split('T')[0];
+    
+    // Set the input values
+    const fromInput = document.getElementById('delivery-date-from');
+    const toInput = document.getElementById('delivery-date-to');
+    
+    if (fromInput) {
+        fromInput.value = fromDate;
+        deliveryFilters.dateFrom = fromDate;
+    }
+    
+    if (toInput) {
+        toInput.value = toDate;
+        deliveryFilters.dateTo = toDate;
+    }
 }
 
 // Navigation
@@ -1346,4 +1360,257 @@ async function viewDelivery(deliveryId) {
     } catch (error) {
         showNotification('載入配送單資料失敗', 'error');
     }
+}
+
+// Setup form handlers
+function setupFormHandlers() {
+    // Add client form handler
+    const addClientForm = document.getElementById('add-client-form');
+    if (addClientForm) {
+        addClientForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(addClientForm);
+            const clientData = {
+                name: formData.get('name'),
+                invoice_title: formData.get('invoice_title'),
+                tax_id: formData.get('tax_id'),
+                contact_person: formData.get('contact_person'),
+                address: formData.get('address'),
+                district: formData.get('district'),
+                is_active: true
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/clients`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(clientData)
+                });
+                
+                if (response.ok) {
+                    showNotification('客戶新增成功', 'success');
+                    addClientForm.reset();
+                    loadClients();
+                } else {
+                    throw new Error('新增失敗');
+                }
+            } catch (error) {
+                showNotification('新增客戶失敗', 'error');
+            }
+        });
+    }
+    
+    // Add delivery form handler
+    const addDeliveryForm = document.getElementById('add-delivery-form');
+    if (addDeliveryForm) {
+        addDeliveryForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(addDeliveryForm);
+            const deliveryData = {
+                client_id: parseInt(formData.get('client_id')),
+                scheduled_date: formData.get('scheduled_date'),
+                scheduled_time_slot: formData.get('scheduled_time_slot'),
+                gas_quantity: parseInt(formData.get('gas_quantity')),
+                delivery_address: formData.get('delivery_address'),
+                delivery_district: formData.get('delivery_district'),
+                unit_price: parseFloat(formData.get('unit_price') || 650),
+                delivery_fee: parseFloat(formData.get('delivery_fee') || 0),
+                payment_method: formData.get('payment_method') || 'cash',
+                requires_empty_cylinder_return: formData.get('requires_empty_cylinder_return') === 'true',
+                empty_cylinders_to_return: parseInt(formData.get('empty_cylinders_to_return') || 0),
+                notes: formData.get('notes')
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/deliveries`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(deliveryData)
+                });
+                
+                if (response.ok) {
+                    showNotification('配送單新增成功', 'success');
+                    addDeliveryForm.reset();
+                    loadDeliveries();
+                } else {
+                    throw new Error('新增失敗');
+                }
+            } catch (error) {
+                showNotification('新增配送單失敗', 'error');
+            }
+        });
+    }
+}
+
+// Load drivers
+async function loadDrivers() {
+    try {
+        const response = await fetch(`${API_BASE}/drivers`);
+        const data = await response.json();
+        
+        allDrivers = data.items || [];
+        
+        const tbody = document.getElementById('drivers-tbody');
+        if (tbody) {
+            tbody.innerHTML = '';
+            
+            if (allDrivers.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-6 py-4 text-center text-gray-500">
+                            沒有司機資料
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            allDrivers.forEach(driver => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50 transition-colors';
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">${driver.id}</td>
+                    <td class="px-6 py-4 whitespace-nowrap font-medium">${driver.name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">${driver.phone || '-'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">${driver.employee_id || '-'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 py-1 text-xs rounded-full ${driver.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                            ${driver.is_active ? '在職' : '離職'}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <button onclick="editDriver(${driver.id})" class="text-blue-600 hover:text-blue-900 mr-2" title="編輯">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="toggleDriverStatus(${driver.id}, ${driver.is_active})" class="text-orange-600 hover:text-orange-900" title="${driver.is_active ? '停用' : '啟用'}">
+                            <i class="fas fa-${driver.is_active ? 'pause' : 'play'}"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        // Update driver select options in forms
+        updateDriverOptions();
+        
+    } catch (error) {
+        console.error('Error loading drivers:', error);
+        showNotification('載入司機資料失敗', 'error');
+    }
+}
+
+// Load vehicles
+async function loadVehicles() {
+    try {
+        const response = await fetch(`${API_BASE}/vehicles`);
+        const data = await response.json();
+        
+        allVehicles = data.items || [];
+        
+        const tbody = document.getElementById('vehicles-tbody');
+        if (tbody) {
+            tbody.innerHTML = '';
+            
+            if (allVehicles.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-6 py-4 text-center text-gray-500">
+                            沒有車輛資料
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            allVehicles.forEach(vehicle => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50 transition-colors';
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">${vehicle.id}</td>
+                    <td class="px-6 py-4 whitespace-nowrap font-medium">${vehicle.plate_number}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">${vehicle.vehicle_type === 1 ? '汽車' : '機車'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">${vehicle.last_maintenance ? formatDate(vehicle.last_maintenance) : '-'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 py-1 text-xs rounded-full ${vehicle.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                            ${vehicle.is_active ? '可用' : '停用'}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <button onclick="editVehicle(${vehicle.id})" class="text-blue-600 hover:text-blue-900 mr-2" title="編輯">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="toggleVehicleStatus(${vehicle.id}, ${vehicle.is_active})" class="text-orange-600 hover:text-orange-900" title="${vehicle.is_active ? '停用' : '啟用'}">
+                            <i class="fas fa-${vehicle.is_active ? 'pause' : 'play'}"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error loading vehicles:', error);
+        showNotification('載入車輛資料失敗', 'error');
+    }
+}
+
+// Toggle driver status
+async function toggleDriverStatus(driverId, currentStatus) {
+    if (!confirm(`確定要${currentStatus ? '停用' : '啟用'}此司機嗎？`)) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/drivers/${driverId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_active: !currentStatus })
+        });
+        
+        if (response.ok) {
+            showNotification(`司機已${!currentStatus ? '啟用' : '停用'}`, 'success');
+            loadDrivers();
+        } else {
+            throw new Error('Update failed');
+        }
+    } catch (error) {
+        showNotification('更新失敗', 'error');
+    }
+}
+
+// Toggle vehicle status
+async function toggleVehicleStatus(vehicleId, currentStatus) {
+    if (!confirm(`確定要${currentStatus ? '停用' : '啟用'}此車輛嗎？`)) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/vehicles/${vehicleId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_active: !currentStatus })
+        });
+        
+        if (response.ok) {
+            showNotification(`車輛已${!currentStatus ? '啟用' : '停用'}`, 'success');
+            loadVehicles();
+        } else {
+            throw new Error('Update failed');
+        }
+    } catch (error) {
+        showNotification('更新失敗', 'error');
+    }
+}
+
+// Update driver options in select elements
+function updateDriverOptions() {
+    const driverSelects = document.querySelectorAll('select[name="driver_id"], #delivery-driver');
+    driverSelects.forEach(select => {
+        const currentValue = select.value;
+        select.innerHTML = '<option value="">全部司機</option>';
+        allDrivers.filter(d => d.is_active).forEach(driver => {
+            const option = document.createElement('option');
+            option.value = driver.id;
+            option.textContent = driver.name;
+            select.appendChild(option);
+        });
+        select.value = currentValue;
+    });
 }
