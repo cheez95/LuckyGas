@@ -1,0 +1,49 @@
+[Unit]
+Description=LuckyGas API Service
+Documentation=https://github.com/cheez95/LuckyGas
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=notify
+User=luckygas
+Group=luckygas
+WorkingDirectory=/opt/luckygas
+Environment="PATH=/opt/luckygas/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONPATH=/opt/luckygas/src/main/python"
+EnvironmentFile=/opt/luckygas/.env
+
+# Start command with gunicorn
+ExecStart=/opt/luckygas/venv/bin/gunicorn \
+    api.main:app \
+    --bind 0.0.0.0:8000 \
+    --workers 4 \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --timeout 120 \
+    --max-requests 1000 \
+    --max-requests-jitter 100 \
+    --access-logfile /var/log/luckygas/access.log \
+    --error-logfile /var/log/luckygas/error.log \
+    --capture-output
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/luckygas/data /var/log/luckygas
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Health check
+ExecStartPost=/bin/sleep 5
+ExecStartPost=/usr/bin/curl -f http://localhost:8000/health || exit 1
+
+[Install]
+WantedBy=multi-user.target

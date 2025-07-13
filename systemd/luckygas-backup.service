@@ -1,0 +1,29 @@
+[Unit]
+Description=LuckyGas Database Backup Service
+Documentation=https://github.com/cheez95/LuckyGas
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=luckygas
+Group=luckygas
+WorkingDirectory=/opt/luckygas
+EnvironmentFile=/opt/luckygas/.env
+
+# Backup script
+ExecStart=/opt/luckygas/scripts/backup.sh
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+# Security
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/luckygas/backups /var/log/luckygas
+
+# Resource limits
+Nice=19
+IOSchedulingClass=idle

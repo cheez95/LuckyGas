@@ -1,0 +1,38 @@
+[Unit]
+Description=LuckyGas System Monitor Service
+Documentation=https://github.com/cheez95/LuckyGas
+After=network.target luckygas-api.service
+Wants=luckygas-api.service
+
+[Service]
+Type=simple
+User=luckygas
+Group=luckygas
+WorkingDirectory=/opt/luckygas
+EnvironmentFile=/opt/luckygas/.env
+
+# Monitor script that checks system health
+ExecStart=/opt/luckygas/scripts/monitor.sh
+
+# Restart policy
+Restart=always
+RestartSec=60
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+# Security
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/luckygas
+ReadWritePaths=/var/log/luckygas /tmp
+
+# Resource limits - monitoring should be lightweight
+Nice=10
+CPUQuota=20%
+MemoryLimit=256M
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+[Unit]
+Description=LuckyGas Daily Database Backup Timer
+Documentation=https://github.com/cheez95/LuckyGas
+
+[Timer]
+# Run daily at 2:30 AM Taiwan time
+OnCalendar=daily
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+
+# Randomize delay up to 30 minutes to avoid load spikes
+RandomizedDelaySec=1800
+
+# If missed (e.g., system was down), run immediately
+AccuracySec=1h
+
+[Install]
+WantedBy=timers.target
