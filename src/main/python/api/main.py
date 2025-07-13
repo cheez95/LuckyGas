@@ -28,7 +28,7 @@ app = FastAPI(
 # CORS 設定 (允許前端應用程式存取)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # React/Vue 開發伺服器
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:8000", "*"],  # React/Vue 開發伺服器 + Swagger UI
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
