@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # Nginx 反向代理
+  nginx:
+    image: nginx:alpine
+    container_name: luckygas-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Nginx 配置
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # SSL 憑證 (生產環境)
+      - ./ssl:/etc/letsencrypt:ro
+      # 靜態檔案
+      - ./public:/var/www/luckygas/public:ro
+      - ./static:/var/www/luckygas/static:ro
+      - ./uploads:/var/www/luckygas/uploads:rw
+      # 錯誤頁面
+      - ./errors:/var/www/luckygas/errors:ro
+      # 日誌
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - api
+    networks:
+      - luckygas-network
+    restart: unless-stopped
+
+  # FastAPI 應用程式
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: luckygas-api
+    expose:
+      - "8000"
+    environment:
+      - DATABASE_URL=sqlite:///./data/luckygas.db
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ../src:/app/src:ro
+      - ../data:/app/data:rw
+    networks:
+      - luckygas-network
+    restart: unless-stopped
+    command: uvicorn src.main.python.api.main:app --host 0.0.0.0 --port 8000 --workers 4
+
+  # 開發環境用的 Nginx (選擇性)
+  nginx-dev:
+    image: nginx:alpine
+    container_name: luckygas-nginx-dev
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx-dev.conf:/etc/nginx/nginx.conf:ro
+      - ./public:/var/www/luckygas/public:ro
+      - ./static:/var/www/luckygas/static:ro
+      - ./uploads:/var/www/luckygas/uploads:rw
+    depends_on:
+      - api
+    networks:
+      - luckygas-network
+    profiles:
+      - dev
+
+networks:
+  luckygas-network:
+    driver: bridge
+
+volumes:
+  ssl:
+  logs:

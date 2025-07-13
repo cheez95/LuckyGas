@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LuckyGas - 幸福瓦斯配送管理系統</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            text-align: center;
+            background: white;
+            padding: 3rem;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            max-width: 600px;
+        }
+        .logo {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+        }
+        p {
+            color: #7f8c8d;
+            line-height: 1.6;
+            margin: 1.5rem 0;
+        }
+        .links {
+            margin-top: 2rem;
+        }
+        .link {
+            display: inline-block;
+            margin: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            background-color: #3498db;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        .link:hover {
+            background-color: #2980b9;
+        }
+        .link.secondary {
+            background-color: #95a5a6;
+        }
+        .link.secondary:hover {
+            background-color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🏠⛽</div>
+        <h1>LuckyGas 幸福瓦斯</h1>
+        <p>智慧瓦斯配送管理系統</p>
+        <p>提供高效率的瓦斯配送排程、路線優化、需求預測等功能，協助提升配送效率與客戶滿意度。</p>
+        <div class="links">
+            <a href="/api/docs" class="link">API 文件</a>
+            <a href="/api/redoc" class="link secondary">ReDoc</a>
+            <a href="/health" class="link secondary">健康檢查</a>
+        </div>
+    </div>
+</body>
+</html>
