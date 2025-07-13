@@ -888,5 +888,261 @@ async function refreshStats() {
     showNotification('統計資料已更新', 'success');
 }
 
-// Initialize the rest of the functions from the original file...
-// (Include all the remaining functions from the original app.js)
+// Edit functions for CRUD operations
+async function editClient(clientId) {
+    try {
+        const response = await fetch(`${API_BASE}/clients/${clientId}`);
+        const client = await response.json();
+        
+        // Create a modal dialog for editing
+        const modal = createEditModal('編輯客戶', `
+            <form id="edit-client-form">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">客戶編號</label>
+                        <input type="text" name="client_code" value="${client.client_code}" class="w-full px-3 py-2 border rounded-md" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">發票抬頭</label>
+                        <input type="text" name="invoice_title" value="${client.invoice_title}" class="w-full px-3 py-2 border rounded-md" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">客戶簡稱</label>
+                        <input type="text" name="short_name" value="${client.short_name || ''}" class="w-full px-3 py-2 border rounded-md">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">聯絡人</label>
+                        <input type="text" name="contact_person" value="${client.contact_person || ''}" class="w-full px-3 py-2 border rounded-md">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">地址</label>
+                        <input type="text" name="address" value="${client.address}" class="w-full px-3 py-2 border rounded-md" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">區域</label>
+                        <input type="text" name="district" value="${client.district || ''}" class="w-full px-3 py-2 border rounded-md">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">狀態</label>
+                        <select name="is_active" class="w-full px-3 py-2 border rounded-md">
+                            <option value="true" ${client.is_active ? 'selected' : ''}>啟用</option>
+                            <option value="false" ${!client.is_active ? 'selected' : ''}>停用</option>
+                        </select>
+                    </div>
+                </div>
+            </form>
+        `);
+        
+        modal.querySelector('#confirm-btn').addEventListener('click', async () => {
+            const form = modal.querySelector('#edit-client-form');
+            const formData = new FormData(form);
+            const updateData = {};
+            
+            for (let [key, value] of formData.entries()) {
+                if (key === 'is_active') {
+                    updateData[key] = value === 'true';
+                } else {
+                    updateData[key] = value;
+                }
+            }
+            
+            try {
+                const updateResponse = await fetch(`${API_BASE}/clients/${clientId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updateData)
+                });
+                
+                if (updateResponse.ok) {
+                    showNotification('客戶資料已更新', 'success');
+                    closeModal(modal);
+                    loadClients();
+                } else {
+                    throw new Error('更新失敗');
+                }
+            } catch (error) {
+                showNotification('更新客戶資料失敗', 'error');
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error editing client:', error);
+        showNotification('載入客戶資料失敗', 'error');
+    }
+}
+
+async function editDriver(driverId) {
+    try {
+        const response = await fetch(`${API_BASE}/drivers/${driverId}`);
+        const driver = await response.json();
+        
+        const modal = createEditModal('編輯司機', `
+            <form id="edit-driver-form">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">姓名</label>
+                        <input type="text" name="name" value="${driver.name}" class="w-full px-3 py-2 border rounded-md" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">電話</label>
+                        <input type="text" name="phone" value="${driver.phone || ''}" class="w-full px-3 py-2 border rounded-md">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">員工編號</label>
+                        <input type="text" name="employee_id" value="${driver.employee_id || ''}" class="w-full px-3 py-2 border rounded-md">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">狀態</label>
+                        <select name="is_active" class="w-full px-3 py-2 border rounded-md">
+                            <option value="true" ${driver.is_active ? 'selected' : ''}>在職</option>
+                            <option value="false" ${!driver.is_active ? 'selected' : ''}>離職</option>
+                        </select>
+                    </div>
+                </div>
+            </form>
+        `);
+        
+        modal.querySelector('#confirm-btn').addEventListener('click', async () => {
+            const form = modal.querySelector('#edit-driver-form');
+            const formData = new FormData(form);
+            const updateData = {};
+            
+            for (let [key, value] of formData.entries()) {
+                if (key === 'is_active') {
+                    updateData[key] = value === 'true';
+                } else {
+                    updateData[key] = value;
+                }
+            }
+            
+            try {
+                const updateResponse = await fetch(`${API_BASE}/drivers/${driverId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updateData)
+                });
+                
+                if (updateResponse.ok) {
+                    showNotification('司機資料已更新', 'success');
+                    closeModal(modal);
+                    loadDrivers();
+                } else {
+                    throw new Error('更新失敗');
+                }
+            } catch (error) {
+                showNotification('更新司機資料失敗', 'error');
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error editing driver:', error);
+        showNotification('載入司機資料失敗', 'error');
+    }
+}
+
+async function editVehicle(vehicleId) {
+    try {
+        const response = await fetch(`${API_BASE}/vehicles/${vehicleId}`);
+        const vehicle = await response.json();
+        
+        const modal = createEditModal('編輯車輛', `
+            <form id="edit-vehicle-form">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">車牌號碼</label>
+                        <input type="text" name="plate_number" value="${vehicle.plate_number}" class="w-full px-3 py-2 border rounded-md" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">車輛類型</label>
+                        <select name="vehicle_type" class="w-full px-3 py-2 border rounded-md">
+                            <option value="1" ${vehicle.vehicle_type === 1 ? 'selected' : ''}>汽車</option>
+                            <option value="2" ${vehicle.vehicle_type === 2 ? 'selected' : ''}>機車</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">狀態</label>
+                        <select name="is_active" class="w-full px-3 py-2 border rounded-md">
+                            <option value="true" ${vehicle.is_active ? 'selected' : ''}>可用</option>
+                            <option value="false" ${!vehicle.is_active ? 'selected' : ''}>停用</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">上次保養日期</label>
+                        <input type="date" name="last_maintenance" value="${vehicle.last_maintenance || ''}" class="w-full px-3 py-2 border rounded-md">
+                    </div>
+                </div>
+            </form>
+        `);
+        
+        modal.querySelector('#confirm-btn').addEventListener('click', async () => {
+            const form = modal.querySelector('#edit-vehicle-form');
+            const formData = new FormData(form);
+            const updateData = {};
+            
+            for (let [key, value] of formData.entries()) {
+                if (key === 'is_active') {
+                    updateData[key] = value === 'true';
+                } else if (key === 'vehicle_type') {
+                    updateData[key] = parseInt(value);
+                } else {
+                    updateData[key] = value;
+                }
+            }
+            
+            try {
+                const updateResponse = await fetch(`${API_BASE}/vehicles/${vehicleId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updateData)
+                });
+                
+                if (updateResponse.ok) {
+                    showNotification('車輛資料已更新', 'success');
+                    closeModal(modal);
+                    loadVehicles();
+                } else {
+                    throw new Error('更新失敗');
+                }
+            } catch (error) {
+                showNotification('更新車輛資料失敗', 'error');
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error editing vehicle:', error);
+        showNotification('載入車輛資料失敗', 'error');
+    }
+}
+
+// Helper function to create edit modal
+function createEditModal(title, content) {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50';
+    modal.innerHTML = `
+        <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
+            <div class="px-6 py-4 border-b">
+                <h3 class="text-lg font-semibold">${title}</h3>
+            </div>
+            <div class="px-6 py-4">
+                ${content}
+            </div>
+            <div class="px-6 py-4 border-t flex justify-end space-x-2">
+                <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
+                    取消
+                </button>
+                <button id="confirm-btn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                    確認
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    return modal;
+}
+
+function closeModal(modal) {
+    if (modal) {
+        modal.remove();
+    }
+}

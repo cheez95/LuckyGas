@@ -9,14 +9,14 @@ Base = declarative_base()
 
 class DeliveryStatus(enum.Enum):
     """配送狀態"""
-    PENDING = "pending"  # 待配送
-    ASSIGNED = "assigned"  # 已分配
-    IN_PROGRESS = "in_progress"  # 配送中
-    COMPLETED = "completed"  # 已完成
-    FAILED = "failed"  # 配送失敗
-    CANCELLED = "cancelled"  # 已取消
-    NOT_HOME = "not_home"  # 客戶不在
-    REFUSED = "refused"  # 客戶拒收
+    PENDING = "PENDING"  # 待配送
+    ASSIGNED = "ASSIGNED"  # 已分配
+    IN_PROGRESS = "IN_PROGRESS"  # 配送中
+    COMPLETED = "COMPLETED"  # 已完成
+    FAILED = "FAILED"  # 配送失敗
+    CANCELLED = "CANCELLED"  # 已取消
+    NOT_HOME = "NOT_HOME"  # 客戶不在
+    REFUSED = "REFUSED"  # 客戶拒收
 
 
 class PaymentMethod(enum.Enum):

@@ -86,7 +86,19 @@ async def get_deliveries(
         query = query.filter(Delivery.driver_id == search.driver_id)
     
     if search.status:
-        status_enum = DeliveryStatus[search.status.upper()]
+        try:
+            # Try to get enum by name (for uppercase values)
+            status_enum = DeliveryStatus[search.status.upper()]
+        except KeyError:
+            # Try to get enum by value (for existing lowercase values in DB)
+            status_enum = None
+            for member in DeliveryStatus:
+                if member.value.lower() == search.status.lower():
+                    status_enum = member
+                    break
+            if not status_enum:
+                # Default to the uppercase version
+                status_enum = DeliveryStatus[search.status.upper()]
         query = query.filter(Delivery.status == status_enum)
     
     if search.scheduled_date_from:
@@ -139,7 +151,7 @@ async def get_deliveries(
         
         delivery_data = {
             **delivery.__dict__,
-            "status": delivery.status.value if hasattr(delivery.status, 'value') else str(delivery.status).replace('DeliveryStatus.', '').lower(),
+            "status": delivery.status.value.lower() if hasattr(delivery.status, 'value') else str(delivery.status).replace('DeliveryStatus.', '').lower(),
             "order_number": generate_order_number(db) if not hasattr(delivery, 'order_number') else delivery.order_number,
             "gas_quantity": total_cylinders,
             "unit_price": unit_price,
@@ -199,7 +211,7 @@ async def get_delivery(delivery_id: int, db: Session = Depends(get_db)):
     
     delivery_data = {
         **delivery.__dict__,
-        "status": delivery.status.value if hasattr(delivery.status, 'value') else delivery.status,
+        "status": delivery.status.value.lower() if hasattr(delivery.status, 'value') else str(delivery.status).replace('DeliveryStatus.', '').lower(),
         "order_number": generate_order_number(db) if not hasattr(delivery, 'order_number') else delivery.order_number,
         "gas_quantity": total_cylinders,
         "unit_price": unit_price,
@@ -268,7 +280,7 @@ async def create_delivery(delivery: DeliveryCreate, db: Session = Depends(get_db
     
     delivery_data = {
         **db_delivery.__dict__,
-        "status": db_delivery.status.value if hasattr(db_delivery.status, 'value') else db_delivery.status,
+        "status": db_delivery.status.value.lower() if hasattr(db_delivery.status, 'value') else str(db_delivery.status).replace('DeliveryStatus.', '').lower(),
         "order_number": generate_order_number(db),
         "gas_quantity": total_cylinders,
         "unit_price": unit_price,
@@ -320,7 +332,20 @@ async def update_delivery(
     
     # Handle status update
     if "status" in update_data:
-        delivery.status = DeliveryStatus[update_data["status"].upper()]
+        try:
+            # Try to get enum by name (for uppercase values)
+            delivery.status = DeliveryStatus[update_data["status"].upper()]
+        except KeyError:
+            # Try to get enum by value
+            status_enum = None
+            for member in DeliveryStatus:
+                if member.value.lower() == update_data["status"].lower():
+                    status_enum = member
+                    break
+            if status_enum:
+                delivery.status = status_enum
+            else:
+                delivery.status = DeliveryStatus[update_data["status"].upper()]
         
         # If marking as completed, set delivered_at
         if update_data["status"] == "completed" and not delivery.actual_delivery_time:
@@ -439,7 +464,7 @@ async def cancel_delivery(delivery_id: int, db: Session = Depends(get_db)):
     if delivery.status in [DeliveryStatus.COMPLETED, DeliveryStatus.CANCELLED]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"狀態為 {delivery.status.value} 的配送單無法取消"
+            detail=f"狀態為 {delivery.status.value.lower()} 的配送單無法取消"
         )
     
     # Cancel delivery
@@ -550,7 +575,7 @@ async def get_today_summary(db: Session = Depends(get_db)):
     }
     
     for status, count in status_counts:
-        status_summary[status.value] = count
+        status_summary[status.value.lower()] = count
     
     # Driver workload
     driver_counts = db.query(

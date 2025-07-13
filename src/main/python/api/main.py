@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
 # 建立 FastAPI 應用程式
 app = FastAPI(
     title="LuckyGas API",
-    description="幸福瓦斯配送管理系統 API",
+    description="幸福氣體配送管理系統 API",
     version="1.0.0",
     lifespan=lifespan
 )
