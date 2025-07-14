@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from core.database import db_manager
-from api.routers import clients_router, deliveries_router, drivers_router, vehicles_router
+from api.routers import clients_router, deliveries_router, drivers_router, vehicles_router, dashboard_router, routes_router
 
 # 應用程式生命週期管理
 @asynccontextmanager
@@ -41,6 +41,8 @@ app.include_router(clients_router, prefix="/api")
 app.include_router(deliveries_router, prefix="/api")
 app.include_router(drivers_router, prefix="/api")
 app.include_router(vehicles_router, prefix="/api")
+app.include_router(dashboard_router, prefix="/api")
+app.include_router(routes_router, prefix="/api")
 
 # 根路徑
 @app.get("/")
@@ -77,7 +79,9 @@ async def api_info():
             "clients": "/clients",
             "deliveries": "/deliveries",
             "drivers": "/drivers",
-            "vehicles": "/vehicles"
+            "vehicles": "/vehicles",
+            "routes": "/routes",
+            "dashboard": "/dashboard"
         },
         "documentation": "/docs",
         "redoc": "/redoc"

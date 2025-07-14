@@ -143,107 +143,92 @@ function showSection(section) {
 // Dashboard with real data
 async function loadDashboard() {
     try {
-        // Load statistics
-        const [clientsRes, deliveriesRes, driversRes, vehiclesRes] = await Promise.all([
-            fetch(`${API_BASE}/clients`),
-            fetch(`${API_BASE}/deliveries/today/summary`),
-            fetch(`${API_BASE}/drivers`),
-            fetch(`${API_BASE}/vehicles`)
-        ]);
-
-        const clients = await clientsRes.json();
-        const todaySummary = await deliveriesRes.json();
-        const drivers = await driversRes.json();
-        const vehicles = await vehiclesRes.json();
-
-        // Update statistics cards
-        document.getElementById('total-clients').textContent = clients.total || 0;
-        document.getElementById('today-deliveries').textContent = todaySummary.total_deliveries || 0;
-        document.getElementById('available-drivers').textContent = drivers.items?.filter(d => d.is_available).length || 0;
-        document.getElementById('available-vehicles').textContent = vehicles.items?.filter(v => v.is_active).length || 0;
-
-        // Load weekly deliveries for chart
-        await loadWeeklyDeliveryChart();
-        loadStatusChart(todaySummary);
+        // Load dashboard statistics from new endpoint
+        const statsRes = await fetch(`${API_BASE}/dashboard/stats`);
+        const stats = await statsRes.json();
         
-        // Load recent activities
-        await loadRecentActivities();
+        // Update statistics cards
+        document.getElementById('total-clients').textContent = stats.overview?.total_clients || 0;
+        document.getElementById('today-deliveries').textContent = stats.today_deliveries?.total || 0;
+        document.getElementById('available-drivers').textContent = stats.overview?.available_drivers || 0;
+        document.getElementById('available-vehicles').textContent = stats.overview?.available_vehicles || 0;
+        
+        // Load charts with data from stats
+        loadWeeklyDeliveryChartFromStats(stats.week_trend);
+        loadStatusChartFromStats(stats.today_deliveries);
+        
+        // Load recent activities from stats
+        loadRecentActivitiesFromStats(stats.recent_activities);
     } catch (error) {
         console.error('Error loading dashboard:', error);
         showNotification('載入儀表板失敗', 'error');
     }
 }
 
-async function loadWeeklyDeliveryChart() {
+function loadWeeklyDeliveryChartFromStats(weekTrend) {
     try {
         const canvas = document.getElementById('deliveryChart');
         if (!canvas) {
             console.error('Delivery chart canvas not found');
             return;
         }
-        const ctx = canvas.getContext('2d');
-    
-    // Get last 7 days of deliveries
-    const dates = [];
-    const counts = [];
-    
-    for (let i = 6; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
         
-        try {
-            const response = await fetch(`${API_BASE}/deliveries?scheduled_date_from=${dateStr}&scheduled_date_to=${dateStr}`);
-            const data = await response.json();
-            
-            dates.push(date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' }));
-            counts.push(data.total || 0);
-        } catch (error) {
-            dates.push(date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' }));
-            counts.push(0);
+        if (!weekTrend || weekTrend.length === 0) {
+            console.warn('No week trend data available');
+            return;
         }
-    }
-
-    // Destroy existing chart if it exists
-    if (window.deliveryChart && typeof window.deliveryChart.destroy === 'function') {
-        window.deliveryChart.destroy();
-    }
-
-    window.deliveryChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: dates,
-            datasets: [{
-                label: '配送數量',
-                data: counts,
-                borderColor: 'rgb(59, 130, 246)',
-                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                tension: 0.1
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    display: false
-                }
+        
+        const ctx = canvas.getContext('2d');
+        const labels = weekTrend.map(day => day.day);
+        const totalData = weekTrend.map(day => day.total);
+        const completedData = weekTrend.map(day => day.completed);
+        
+        // Destroy existing chart if it exists
+        if (window.deliveryChart && typeof window.deliveryChart.destroy === 'function') {
+            window.deliveryChart.destroy();
+        }
+        
+        window.deliveryChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '總配送數',
+                    data: totalData,
+                    borderColor: 'rgb(59, 130, 246)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    tension: 0.1
+                }, {
+                    label: '已完成',
+                    data: completedData,
+                    borderColor: 'rgb(34, 197, 94)',
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    tension: 0.1
+                }]
             },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        stepSize: 1
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: true
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
                     }
                 }
             }
-        }
-    });
+        });
     } catch (error) {
         console.error('Error loading delivery chart:', error);
     }
 }
 
-function loadStatusChart(summary) {
+function loadStatusChartFromStats(todayDeliveries) {
     try {
         const canvas = document.getElementById('statusChart');
         if (!canvas) {
@@ -252,13 +237,10 @@ function loadStatusChart(summary) {
         }
         const ctx = canvas.getContext('2d');
     
-    const statusData = summary.status_summary || {
-        pending: 0,
-        assigned: 0,
-        in_progress: 0,
-        completed: 0,
-        cancelled: 0
-    };
+    const completed = todayDeliveries?.completed || 0;
+    const pending = todayDeliveries?.pending || 0;
+    const inProgress = todayDeliveries?.in_progress || 0;
+    const cancelled = todayDeliveries?.cancelled || 0;
 
     // Destroy existing chart if it exists
     if (window.statusChart) {
@@ -268,29 +250,30 @@ function loadStatusChart(summary) {
     window.statusChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['待處理', '已指派', '配送中', '已完成', '已取消'],
+            labels: ['已完成', '待配送', '配送中', '已取消'],
             datasets: [{
-                data: [
-                    statusData.pending || 0,
-                    statusData.assigned || 0,
-                    statusData.in_progress || 0,
-                    statusData.completed || 0,
-                    statusData.cancelled || 0
-                ],
+                data: [completed, pending, inProgress, cancelled],
                 backgroundColor: [
-                    'rgb(251, 191, 36)',
-                    'rgb(59, 130, 246)',
-                    'rgb(147, 51, 234)',
-                    'rgb(34, 197, 94)',
-                    'rgb(239, 68, 68)'
-                ]
+                    'rgba(34, 197, 94, 0.8)',
+                    'rgba(251, 191, 36, 0.8)',
+                    'rgba(59, 130, 246, 0.8)',
+                    'rgba(239, 68, 68, 0.8)'
+                ],
+                borderWidth: 0
             }]
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    position: 'bottom'
+                    position: 'bottom',
+                    labels: {
+                        padding: 10,
+                        font: {
+                            size: 12
+                        }
+                    }
                 }
             }
         }
@@ -335,6 +318,54 @@ async function loadRecentActivities() {
                     <div class="text-right">
                         <p class="text-sm ${statusColors[delivery.status] || 'text-gray-600'}">${delivery.status_display || delivery.status}</p>
                         <p class="text-xs text-gray-500">${formatDateTime(delivery.created_at)}</p>
+                    </div>
+                `;
+                
+                list.appendChild(item);
+            });
+            
+            container.appendChild(list);
+        } else {
+            container.innerHTML += '<p class="text-gray-500">暫無最近活動</p>';
+        }
+    } catch (error) {
+        console.error('Error loading recent activities:', error);
+    }
+}
+
+function loadRecentActivitiesFromStats(recentActivities) {
+    try {
+        const container = document.getElementById('recent-activities');
+        if (!container) return;
+        
+        container.innerHTML = '<h3 class="text-lg font-semibold mb-4">最近活動</h3>';
+        
+        if (recentActivities && recentActivities.length > 0) {
+            const list = document.createElement('div');
+            list.className = 'space-y-2';
+            
+            recentActivities.forEach(activity => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between p-3 bg-gray-50 rounded';
+                
+                const statusColors = {
+                    'PENDING': 'text-yellow-600',
+                    'ASSIGNED': 'text-blue-600',
+                    'IN_PROGRESS': 'text-purple-600',
+                    'COMPLETED': 'text-green-600',
+                    'CANCELLED': 'text-red-600'
+                };
+                
+                const statusText = getStatusText(activity.status);
+                
+                item.innerHTML = `
+                    <div>
+                        <p class="font-medium">${activity.client_name}</p>
+                        <p class="text-sm text-gray-600">${activity.scheduled_date} - ${activity.driver_name}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm ${statusColors[activity.status] || 'text-gray-600'}">${statusText}</p>
+                        <p class="text-xs text-gray-500">${activity.updated_at}</p>
                     </div>
                 `;
                 
