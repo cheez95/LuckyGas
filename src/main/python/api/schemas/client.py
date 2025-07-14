@@ -56,6 +56,8 @@ class ClientUpdate(BaseModel):
 class ClientResponse(ClientBase, TimestampMixin, TaiwanDateMixin):
     """Schema for client response"""
     id: int = Field(..., description="客戶ID")
+    client_code: Optional[str] = Field(None, max_length=20, description="客戶編號")
+    invoice_title: Optional[str] = Field(None, max_length=200, description="電子發票抬頭")
     is_active: bool = Field(default=True, description="是否啟用")
     
     # Statistics

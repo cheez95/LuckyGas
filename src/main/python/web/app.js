@@ -174,7 +174,7 @@ async function loadWeeklyDeliveryChart() {
     }
 
     // Destroy existing chart if it exists
-    if (window.deliveryChart) {
+    if (window.deliveryChart && typeof window.deliveryChart.destroy === 'function') {
         window.deliveryChart.destroy();
     }
 
@@ -1162,6 +1162,145 @@ function createEditModal(title, content) {
 function closeModal(modal) {
     if (modal) {
         modal.remove();
+    }
+}
+
+// Modal display functions
+function showAddClientModal() {
+    let modal = document.getElementById('addClientModal');
+    if (!modal) {
+        // Create modal dynamically if it doesn't exist
+        modal = createModal(`
+            <div class="bg-white rounded-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+                <h2 class="text-xl font-bold mb-4">新增客戶</h2>
+                <form id="add-client-form" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">客戶編號</label>
+                        <input type="text" name="client_code" required class="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">客戶名稱</label>
+                        <input type="text" name="name" required class="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">發票抬頭</label>
+                        <input type="text" name="invoice_title" required class="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">地址</label>
+                        <input type="text" name="address" required class="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">電話</label>
+                        <input type="tel" name="phone" class="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">聯絡人</label>
+                        <input type="text" name="contact_person" class="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">付款方式</label>
+                        <select name="payment_method" class="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500">
+                            <option value="CASH">現金</option>
+                            <option value="MONTHLY">月結</option>
+                            <option value="TRANSFER">轉帳</option>
+                        </select>
+                    </div>
+                    <div class="flex justify-end space-x-2 pt-4">
+                        <button type="button" onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
+                            取消
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                            新增
+                        </button>
+                    </div>
+                </form>
+            </div>
+        `);
+        modal.id = 'addClientModal';
+        // Re-setup form handler for the new form
+        setupAddClientFormHandler();
+    } else {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        const form = modal.querySelector('form');
+        if (form) {
+            form.reset();
+        }
+    }
+}
+
+function showAddDriverModal() {
+    const modal = document.getElementById('addDriverModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        const form = modal.querySelector('form');
+        if (form) {
+            form.reset();
+        }
+    } else {
+        console.error('Add driver modal not found');
+    }
+}
+
+function showAddVehicleModal() {
+    const modal = document.getElementById('addVehicleModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        const form = modal.querySelector('form');
+        if (form) {
+            form.reset();
+        }
+    } else {
+        console.error('Add vehicle modal not found');
+    }
+}
+
+function showAddDeliveryModal() {
+    const modal = document.getElementById('addDeliveryModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        const form = modal.querySelector('form');
+        if (form) {
+            form.reset();
+        }
+    } else {
+        console.error('Add delivery modal not found');
+    }
+}
+
+// Helper function to setup add client form handler
+function setupAddClientFormHandler() {
+    const form = document.getElementById('add-client-form');
+    if (form && !form.dataset.handlerAttached) {
+        form.dataset.handlerAttached = 'true';
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                const response = await fetch('/api/clients', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    showNotification('客戶新增成功', 'success');
+                    closeModal(document.getElementById('addClientModal'));
+                    loadClients(1);
+                } else {
+                    const error = await response.json();
+                    showNotification(error.detail || '新增失敗', 'error');
+                }
+            } catch (error) {
+                showNotification('新增失敗: ' + error.message, 'error');
+            }
+        });
     }
 }
 
