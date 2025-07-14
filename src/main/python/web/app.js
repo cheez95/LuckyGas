@@ -975,6 +975,9 @@ function switchClientTab(tab) {
     }
 }
 
+// Make switchClientTab globally accessible
+window.switchClientTab = switchClientTab;
+
 // Load client deliveries
 async function loadClientDeliveries(clientCode, page = 1) {
     try {
@@ -1120,6 +1123,9 @@ function renderClientDeliveries(data, clientCode) {
         ` : ''}
     `;
 }
+
+// Make loadClientDeliveries globally accessible
+window.loadClientDeliveries = loadClientDeliveries;
 
 // Calculate delivery statistics
 function calculateDeliveryStats(deliveries) {
