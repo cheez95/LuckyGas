@@ -388,13 +388,273 @@
     <!-- Modals (same as before, include all modals from original file) -->
     <!-- Add Client Modal -->
     <div id="addClientModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
-        <!-- Modal content from original file -->
+        <div class="bg-white rounded-lg p-8 max-w-md w-full">
+            <h3 class="text-xl font-bold mb-4">新增客戶</h3>
+            <form id="add-client-form">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">客戶名稱</label>
+                    <input type="text" name="name" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">客戶編號</label>
+                    <input type="text" name="client_code" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">發票抬頭</label>
+                    <input type="text" name="invoice_title" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">地址</label>
+                    <input type="text" name="address" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">聯絡人</label>
+                    <input type="text" name="contact_person" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">統一編號</label>
+                    <input type="text" name="tax_id" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <input type="checkbox" name="is_corporate" class="mr-2">
+                        公司戶
+                    </label>
+                </div>
+                <div class="flex justify-end gap-4">
+                    <button type="button" onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 hover:text-gray-800">
+                        取消
+                    </button>
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+                        新增
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 
-    <!-- Include other modals... -->
+    <!-- Add Delivery Modal -->
+    <div id="addDeliveryModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center overflow-y-auto z-50">
+        <div class="bg-white rounded-lg p-8 max-w-2xl w-full my-8">
+            <h3 class="text-xl font-bold mb-4">新增配送單</h3>
+            <form id="add-delivery-form">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="mb-4 col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">客戶</label>
+                        <select name="client_id" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                            <option value="">請選擇客戶</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">預定配送日期</label>
+                        <input type="date" name="scheduled_date" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">預定時段</label>
+                        <select name="scheduled_time_slot" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                            <option value="">請選擇</option>
+                            <option value="上午 9:00-12:00">上午 9:00-12:00</option>
+                            <option value="下午 12:00-15:00">下午 12:00-15:00</option>
+                            <option value="下午 15:00-18:00">下午 15:00-18:00</option>
+                            <option value="晚上 18:00-21:00">晚上 18:00-21:00</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">瓦斯桶數</label>
+                        <input type="number" name="gas_quantity" required min="1" value="1" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">單價</label>
+                        <input type="number" name="unit_price" required min="0" value="800" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">運費</label>
+                        <input type="number" name="delivery_fee" min="0" value="0" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">付款方式</label>
+                        <select name="payment_method" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                            <option value="cash">現金</option>
+                            <option value="transfer">轉帳</option>
+                            <option value="monthly_billing">月結</option>
+                        </select>
+                    </div>
+                    <div class="mb-4 col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">配送地址</label>
+                        <input type="text" name="delivery_address" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">配送區域</label>
+                        <input type="text" name="delivery_district" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">回收空桶數</label>
+                        <input type="number" name="empty_cylinders_to_return" min="0" value="0" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4 col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">備註</label>
+                        <textarea name="notes" rows="3" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500"></textarea>
+                    </div>
+                    <div class="mb-4 col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <input type="checkbox" name="requires_empty_cylinder_return" class="mr-2">
+                            需要回收空桶
+                        </label>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-4 mt-6">
+                    <button type="button" onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 hover:text-gray-800">
+                        取消
+                    </button>
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+                        新增
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Driver Modal -->
+    <div id="addDriverModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center overflow-y-auto z-50">
+        <div class="bg-white rounded-lg p-8 max-w-2xl w-full my-8">
+            <h3 class="text-xl font-bold mb-4">新增司機</h3>
+            <form id="add-driver-form">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">姓名</label>
+                        <input type="text" name="name" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">員工編號</label>
+                        <input type="text" name="employee_id" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">電話</label>
+                        <input type="tel" name="phone" required pattern="09[0-9]{8}" placeholder="0912345678" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">身分證字號</label>
+                        <input type="text" name="id_number" required pattern="[A-Z][0-9]{9}" placeholder="A123456789" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4 col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">地址</label>
+                        <input type="text" name="address" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">緊急聯絡人</label>
+                        <input type="text" name="emergency_contact" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">緊急聯絡電話</label>
+                        <input type="tel" name="emergency_phone" required pattern="09[0-9]{8}" placeholder="0987654321" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">駕照號碼</label>
+                        <input type="text" name="license_number" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">駕照類型</label>
+                        <select name="license_type" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                            <option value="">請選擇</option>
+                            <option value="職業大貨車">職業大貨車</option>
+                            <option value="職業小型車">職業小型車</option>
+                            <option value="普通大貨車">普通大貨車</option>
+                            <option value="普通小型車">普通小型車</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">駕照到期日</label>
+                        <input type="date" name="license_expiry_date" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">入職日期</label>
+                        <input type="date" name="hire_date" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">底薪</label>
+                        <input type="number" name="base_salary" required min="0" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">獎金比例 (%)</label>
+                        <input type="number" name="commission_rate" required min="0" max="100" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-4 mt-6">
+                    <button type="button" onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 hover:text-gray-800">
+                        取消
+                    </button>
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+                        新增
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Vehicle Modal -->
+    <div id="addVehicleModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center overflow-y-auto z-50">
+        <div class="bg-white rounded-lg p-8 max-w-2xl w-full my-8">
+            <h3 class="text-xl font-bold mb-4">新增車輛</h3>
+            <form id="add-vehicle-form">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">車牌號碼</label>
+                        <input type="text" name="plate_number" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">車型</label>
+                        <select name="vehicle_type" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                            <option value="">請選擇</option>
+                            <option value="truck">貨車</option>
+                            <option value="van">廂型車</option>
+                            <option value="motorcycle">機車</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">品牌</label>
+                        <input type="text" name="brand" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">型號</label>
+                        <input type="text" name="model" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">出廠年份</label>
+                        <input type="number" name="year" required min="1990" max="2030" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">燃料類型</label>
+                        <select name="fuel_type" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                            <option value="">請選擇</option>
+                            <option value="gasoline">汽油</option>
+                            <option value="diesel">柴油</option>
+                            <option value="electric">電動</option>
+                            <option value="hybrid">油電混合</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">最大載重 (公斤)</label>
+                        <input type="number" name="max_load_kg" required min="0" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">最大瓦斯桶數</label>
+                        <input type="number" name="max_cylinders" required min="0" class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-4 mt-6">
+                    <button type="button" onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 hover:text-gray-800">
+                        取消
+                    </button>
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+                        新增
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <!-- Scripts -->
-    <script src="/static/app.js"></script>
+    <script src="app.js"></script>
     <script>
         // Additional enhanced functions
         function sortClients(field) {

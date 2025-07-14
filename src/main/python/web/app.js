@@ -67,24 +67,42 @@ function setupDateDefaults() {
 
 // Navigation
 function setupNavigation() {
-    document.querySelectorAll('.nav-link').forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            const section = e.target.getAttribute('href').substring(1);
-            showSection(section);
+    try {
+        const navLinks = document.querySelectorAll('.nav-link');
+        if (navLinks.length === 0) {
+            console.warn('No navigation links found');
+            return;
+        }
+        
+        navLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const href = e.target.getAttribute('href');
+                if (href && href.startsWith('#')) {
+                    const section = href.substring(1);
+                    showSection(section);
+                } else {
+                    console.error('Invalid navigation link:', href);
+                    showNotification('導航錯誤', 'error');
+                }
+            });
         });
-    });
+    } catch (error) {
+        console.error('Error setting up navigation:', error);
+        showNotification('導航系統初始化失敗', 'error');
+    }
 }
 
 function showSection(section) {
-    // Hide all sections
-    document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-    
-    // Show selected section
-    const sectionElement = document.getElementById(section);
-    if (sectionElement) {
-        sectionElement.classList.remove('hidden');
-        currentPage = section;
+    try {
+        // Hide all sections
+        document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+        
+        // Show selected section
+        const sectionElement = document.getElementById(section);
+        if (sectionElement) {
+            sectionElement.classList.remove('hidden');
+            currentPage = section;
         
         // Update active nav
         document.querySelectorAll('.nav-link').forEach(link => {
@@ -112,6 +130,13 @@ function showSection(section) {
                 loadDeliveries();
                 break;
         }
+    } else {
+        console.error('Section not found:', section);
+        showNotification(`找不到頁面: ${section}`, 'error');
+    }
+    } catch (error) {
+        console.error('Error showing section:', error);
+        showNotification('頁面切換失敗', 'error');
     }
 }
 
@@ -150,7 +175,13 @@ async function loadDashboard() {
 }
 
 async function loadWeeklyDeliveryChart() {
-    const ctx = document.getElementById('deliveryChart').getContext('2d');
+    try {
+        const canvas = document.getElementById('deliveryChart');
+        if (!canvas) {
+            console.error('Delivery chart canvas not found');
+            return;
+        }
+        const ctx = canvas.getContext('2d');
     
     // Get last 7 days of deliveries
     const dates = [];
@@ -207,10 +238,19 @@ async function loadWeeklyDeliveryChart() {
             }
         }
     });
+    } catch (error) {
+        console.error('Error loading delivery chart:', error);
+    }
 }
 
 function loadStatusChart(summary) {
-    const ctx = document.getElementById('statusChart').getContext('2d');
+    try {
+        const canvas = document.getElementById('statusChart');
+        if (!canvas) {
+            console.error('Status chart canvas not found');
+            return;
+        }
+        const ctx = canvas.getContext('2d');
     
     const statusData = summary.status_summary || {
         pending: 0,
@@ -255,6 +295,9 @@ function loadStatusChart(summary) {
             }
         }
     });
+    } catch (error) {
+        console.error('Error loading status chart:', error);
+    }
 }
 
 async function loadRecentActivities() {
@@ -1258,7 +1301,7 @@ function showAddVehicleModal() {
     }
 }
 
-function showAddDeliveryModal() {
+async function showAddDeliveryModal() {
     const modal = document.getElementById('addDeliveryModal');
     if (modal) {
         modal.classList.remove('hidden');
@@ -1266,9 +1309,42 @@ function showAddDeliveryModal() {
         const form = modal.querySelector('form');
         if (form) {
             form.reset();
+            
+            // Populate client dropdown
+            const clientSelect = form.querySelector('select[name="client_id"]');
+            if (clientSelect && allClients.length === 0) {
+                // Load clients if not already loaded
+                try {
+                    const response = await fetch(`${API_BASE}/clients?limit=1000`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        allClients = data.items || [];
+                    }
+                } catch (error) {
+                    console.error('Error loading clients:', error);
+                }
+            }
+            
+            // Populate dropdown
+            if (clientSelect) {
+                clientSelect.innerHTML = '<option value="">請選擇客戶</option>';
+                allClients.forEach(client => {
+                    const option = document.createElement('option');
+                    option.value = client.id;
+                    option.textContent = `${client.client_code} - ${client.name || client.invoice_title}`;
+                    clientSelect.appendChild(option);
+                });
+            }
+            
+            // Set today as default date
+            const dateInput = form.querySelector('input[name="scheduled_date"]');
+            if (dateInput) {
+                dateInput.value = new Date().toISOString().split('T')[0];
+            }
         }
     } else {
         console.error('Add delivery modal not found');
+        showNotification('配送單模態視窗未找到', 'error');
     }
 }
 
@@ -1555,7 +1631,7 @@ function setupFormHandlers() {
                 unit_price: parseFloat(formData.get('unit_price') || 650),
                 delivery_fee: parseFloat(formData.get('delivery_fee') || 0),
                 payment_method: formData.get('payment_method') || 'cash',
-                requires_empty_cylinder_return: formData.get('requires_empty_cylinder_return') === 'true',
+                requires_empty_cylinder_return: formData.get('requires_empty_cylinder_return') === 'on',
                 empty_cylinders_to_return: parseInt(formData.get('empty_cylinders_to_return') || 0),
                 notes: formData.get('notes')
             };
@@ -1569,6 +1645,7 @@ function setupFormHandlers() {
                 
                 if (response.ok) {
                     showNotification('配送單新增成功', 'success');
+                    closeModal(document.getElementById('addDeliveryModal'));
                     addDeliveryForm.reset();
                     loadDeliveries();
                 } else {
@@ -1576,6 +1653,89 @@ function setupFormHandlers() {
                 }
             } catch (error) {
                 showNotification('新增配送單失敗', 'error');
+            }
+        });
+    }
+    
+    // Add driver form handler
+    const addDriverForm = document.getElementById('add-driver-form');
+    if (addDriverForm) {
+        addDriverForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(addDriverForm);
+            const driverData = {
+                name: formData.get('name'),
+                employee_id: formData.get('employee_id'),
+                phone: formData.get('phone'),
+                id_number: formData.get('id_number'),
+                address: formData.get('address'),
+                emergency_contact: formData.get('emergency_contact'),
+                emergency_phone: formData.get('emergency_phone'),
+                license_number: formData.get('license_number'),
+                license_type: formData.get('license_type'),
+                license_expiry_date: formData.get('license_expiry_date'),
+                hire_date: formData.get('hire_date'),
+                base_salary: parseFloat(formData.get('base_salary') || 0),
+                commission_rate: parseFloat(formData.get('commission_rate') || 0)
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/drivers`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(driverData)
+                });
+                
+                if (response.ok) {
+                    showNotification('司機新增成功', 'success');
+                    closeModal(document.getElementById('addDriverModal'));
+                    addDriverForm.reset();
+                    loadDrivers();
+                } else {
+                    const error = await response.json();
+                    showNotification(error.detail || '新增失敗', 'error');
+                }
+            } catch (error) {
+                showNotification('新增司機失敗: ' + error.message, 'error');
+            }
+        });
+    }
+    
+    // Add vehicle form handler
+    const addVehicleForm = document.getElementById('add-vehicle-form');
+    if (addVehicleForm) {
+        addVehicleForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(addVehicleForm);
+            const vehicleData = {
+                plate_number: formData.get('plate_number'),
+                vehicle_type: formData.get('vehicle_type'),
+                brand: formData.get('brand'),
+                model: formData.get('model'),
+                year: parseInt(formData.get('year')),
+                fuel_type: formData.get('fuel_type'),
+                max_load_kg: parseFloat(formData.get('max_load_kg') || 0),
+                max_cylinders: parseInt(formData.get('max_cylinders') || 0)
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/vehicles`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(vehicleData)
+                });
+                
+                if (response.ok) {
+                    showNotification('車輛新增成功', 'success');
+                    closeModal(document.getElementById('addVehicleModal'));
+                    addVehicleForm.reset();
+                    loadVehicles();
+                } else {
+                    const error = await response.json();
+                    showNotification(error.detail || '新增失敗', 'error');
+                }
+            } catch (error) {
+                showNotification('新增車輛失敗: ' + error.message, 'error');
             }
         });
     }
@@ -1752,4 +1912,432 @@ function updateDriverOptions() {
         });
         select.value = currentValue;
     });
+}
+
+// View driver details
+async function viewDriverDetails(driverId) {
+    try {
+        const response = await fetch(`${API_BASE}/drivers/${driverId}`);
+        if (!response.ok) throw new Error('Failed to fetch driver details');
+        
+        const driver = await response.json();
+        
+        const modalContent = `
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <p class="text-sm text-gray-600">司機姓名</p>
+                    <p class="font-medium">${driver.name}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">員工編號</p>
+                    <p class="font-medium">${driver.employee_id || '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">電話</p>
+                    <p class="font-medium">${driver.phone || '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">身分證字號</p>
+                    <p class="font-medium">${driver.id_number || '-'}</p>
+                </div>
+                <div class="col-span-2">
+                    <p class="text-sm text-gray-600">地址</p>
+                    <p class="font-medium">${driver.address || '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">緊急聯絡人</p>
+                    <p class="font-medium">${driver.emergency_contact || '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">緊急聯絡電話</p>
+                    <p class="font-medium">${driver.emergency_phone || '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">駕照號碼</p>
+                    <p class="font-medium">${driver.license_number || '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">駕照類型</p>
+                    <p class="font-medium">${driver.license_type || '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">駕照到期日</p>
+                    <p class="font-medium">${driver.license_expiry_date ? formatDate(driver.license_expiry_date) : '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">入職日期</p>
+                    <p class="font-medium">${driver.hire_date ? formatDate(driver.hire_date) : '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">狀態</p>
+                    <p class="font-medium">
+                        <span class="px-2 py-1 text-xs rounded-full ${driver.is_available ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
+                            ${driver.is_available ? '可用' : '不可用'}
+                        </span>
+                    </p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">配送統計</p>
+                    <p class="font-medium">${driver.delivery_count || 0} 筆配送</p>
+                </div>
+            </div>
+        `;
+        
+        const modal = createModal(`
+            <h2 class="text-xl font-bold mb-4">司機詳細資料</h2>
+            ${modalContent}
+            <div class="mt-6 flex justify-end">
+                <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
+                    關閉
+                </button>
+            </div>
+        `);
+    } catch (error) {
+        showNotification('無法載入司機資料', 'error');
+    }
+}
+
+// Toggle driver availability
+async function toggleDriverAvailability(driverId) {
+    try {
+        // Get current driver data
+        const response = await fetch(`${API_BASE}/drivers/${driverId}`);
+        if (!response.ok) throw new Error('Failed to fetch driver');
+        
+        const driver = await response.json();
+        const newAvailability = !driver.is_available;
+        
+        if (!confirm(`確定要${newAvailability ? '啟用' : '停用'}此司機嗎？`)) return;
+        
+        const updateResponse = await fetch(`${API_BASE}/drivers/${driverId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_available: newAvailability })
+        });
+        
+        if (updateResponse.ok) {
+            showNotification(`司機已${newAvailability ? '啟用' : '停用'}`, 'success');
+            loadDrivers();
+        } else {
+            throw new Error('Update failed');
+        }
+    } catch (error) {
+        showNotification('更新失敗: ' + error.message, 'error');
+    }
+}
+
+// View driver deliveries
+async function viewDriverDeliveries(driverId) {
+    try {
+        const response = await fetch(`${API_BASE}/deliveries?driver_id=${driverId}&limit=50`);
+        if (!response.ok) throw new Error('Failed to fetch deliveries');
+        
+        const data = await response.json();
+        const deliveries = data.items || [];
+        
+        let tableContent = '';
+        if (deliveries.length === 0) {
+            tableContent = '<p class="text-center text-gray-500 py-4">此司機沒有配送記錄</p>';
+        } else {
+            tableContent = `
+                <div class="overflow-x-auto">
+                    <table class="min-w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">日期</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">客戶</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">地址</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">狀態</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            ${deliveries.map(delivery => `
+                                <tr>
+                                    <td class="px-4 py-2 text-sm">${formatDate(delivery.scheduled_date)}</td>
+                                    <td class="px-4 py-2 text-sm">${delivery.client_name || '-'}</td>
+                                    <td class="px-4 py-2 text-sm">${delivery.delivery_address || '-'}</td>
+                                    <td class="px-4 py-2 text-sm">
+                                        <span class="px-2 py-1 text-xs rounded-full ${getStatusColor(delivery.status)}">
+                                            ${getStatusText(delivery.status)}
+                                        </span>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+        
+        const modal = createModal(`
+            <h2 class="text-xl font-bold mb-4">司機配送記錄</h2>
+            ${tableContent}
+            <div class="mt-6 flex justify-end">
+                <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
+                    關閉
+                </button>
+            </div>
+        `);
+    } catch (error) {
+        showNotification('無法載入配送記錄', 'error');
+    }
+}
+
+// View vehicle details
+async function viewVehicleDetails(vehicleId) {
+    try {
+        const response = await fetch(`${API_BASE}/vehicles/${vehicleId}`);
+        if (!response.ok) throw new Error('Failed to fetch vehicle details');
+        
+        const vehicle = await response.json();
+        
+        const modalContent = `
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <p class="text-sm text-gray-600">車牌號碼</p>
+                    <p class="font-medium">${vehicle.plate_number}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">車型</p>
+                    <p class="font-medium">${vehicle.vehicle_type || '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">品牌</p>
+                    <p class="font-medium">${vehicle.brand || '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">型號</p>
+                    <p class="font-medium">${vehicle.model || '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">年份</p>
+                    <p class="font-medium">${vehicle.year || '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">燃料類型</p>
+                    <p class="font-medium">${vehicle.fuel_type || '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">最大載重</p>
+                    <p class="font-medium">${vehicle.max_load_kg || 0} 公斤</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">最大瓦斯桶數</p>
+                    <p class="font-medium">${vehicle.max_cylinders || 0} 桶</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">狀態</p>
+                    <p class="font-medium">
+                        <span class="px-2 py-1 text-xs rounded-full ${vehicle.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                            ${vehicle.is_active ? '啟用' : '停用'}
+                        </span>
+                    </p>
+                </div>
+                ${vehicle.maintenance_status ? `
+                <div>
+                    <p class="text-sm text-gray-600">維修狀態</p>
+                    <p class="font-medium">
+                        <span class="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800">
+                            維修中
+                        </span>
+                    </p>
+                </div>
+                ` : ''}
+            </div>
+        `;
+        
+        const modal = createModal(`
+            <h2 class="text-xl font-bold mb-4">車輛詳細資料</h2>
+            ${modalContent}
+            <div class="mt-6 flex justify-end">
+                <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
+                    關閉
+                </button>
+            </div>
+        `);
+    } catch (error) {
+        showNotification('無法載入車輛資料', 'error');
+    }
+}
+
+// View delivery details
+async function viewDeliveryDetails(deliveryId) {
+    try {
+        const response = await fetch(`${API_BASE}/deliveries/${deliveryId}`);
+        if (!response.ok) throw new Error('Failed to fetch delivery details');
+        
+        const delivery = await response.json();
+        
+        const modalContent = `
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <p class="text-sm text-gray-600">配送編號</p>
+                    <p class="font-medium">#${delivery.id}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">狀態</p>
+                    <p class="font-medium">
+                        <span class="px-2 py-1 text-xs rounded-full ${getStatusColor(delivery.status)}">
+                            ${getStatusText(delivery.status)}
+                        </span>
+                    </p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">客戶</p>
+                    <p class="font-medium">${delivery.client_name || '-'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">司機</p>
+                    <p class="font-medium">${delivery.driver_name || '未指派'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">預定日期</p>
+                    <p class="font-medium">${formatDate(delivery.scheduled_date)}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">預定時段</p>
+                    <p class="font-medium">${delivery.scheduled_time_slot || '-'}</p>
+                </div>
+                <div class="col-span-2">
+                    <p class="text-sm text-gray-600">配送地址</p>
+                    <p class="font-medium">${delivery.delivery_address}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">瓦斯數量</p>
+                    <p class="font-medium">${delivery.gas_quantity} 桶</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">總金額</p>
+                    <p class="font-medium">NT$ ${delivery.total_amount || 0}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">付款方式</p>
+                    <p class="font-medium">${getPaymentMethodText(delivery.payment_method)}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">需要回收空桶</p>
+                    <p class="font-medium">${delivery.requires_empty_cylinder_return ? '是' : '否'}</p>
+                </div>
+                ${delivery.notes ? `
+                <div class="col-span-2">
+                    <p class="text-sm text-gray-600">備註</p>
+                    <p class="font-medium">${delivery.notes}</p>
+                </div>
+                ` : ''}
+            </div>
+        `;
+        
+        const modal = createModal(`
+            <h2 class="text-xl font-bold mb-4">配送單詳細資料</h2>
+            ${modalContent}
+            <div class="mt-6 flex justify-end gap-2">
+                ${delivery.status === 'pending' ? `
+                    <button onclick="assignDriver(${delivery.id})" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                        指派司機
+                    </button>
+                ` : ''}
+                <button onclick="updateDeliveryStatus(${delivery.id}, '${delivery.status}')" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                    更新狀態
+                </button>
+                <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
+                    關閉
+                </button>
+            </div>
+        `);
+    } catch (error) {
+        showNotification('無法載入配送單資料', 'error');
+    }
+}
+
+// Assign driver to delivery
+async function assignDriver(deliveryId) {
+    try {
+        // Get available drivers
+        const driversResponse = await fetch(`${API_BASE}/drivers?is_available=true`);
+        if (!driversResponse.ok) throw new Error('Failed to fetch drivers');
+        
+        const driversData = await driversResponse.json();
+        const availableDrivers = driversData.items || [];
+        
+        if (availableDrivers.length === 0) {
+            showNotification('沒有可用的司機', 'warning');
+            return;
+        }
+        
+        const driverOptions = availableDrivers.map(driver => 
+            `<option value="${driver.id}">${driver.name}</option>`
+        ).join('');
+        
+        const modalContent = `
+            <h2 class="text-xl font-bold mb-4">指派司機</h2>
+            <form id="assign-driver-form">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">選擇司機</label>
+                    <select name="driver_id" required class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
+                        <option value="">請選擇司機</option>
+                        ${driverOptions}
+                    </select>
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button" onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 hover:text-gray-800">
+                        取消
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                        確定指派
+                    </button>
+                </div>
+            </form>
+        `;
+        
+        const modal = createModal(modalContent);
+        
+        // Add form handler
+        const form = modal.querySelector('#assign-driver-form');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const driverId = form.driver_id.value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/deliveries/${deliveryId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        driver_id: parseInt(driverId),
+                        status: 'assigned'
+                    })
+                });
+                
+                if (response.ok) {
+                    showNotification('司機指派成功', 'success');
+                    closeModal(modal);
+                    loadDeliveries();
+                } else {
+                    throw new Error('Assignment failed');
+                }
+            } catch (error) {
+                showNotification('指派失敗: ' + error.message, 'error');
+            }
+        });
+    } catch (error) {
+        showNotification('無法載入司機列表', 'error');
+    }
+}
+
+// Helper function to get payment method text
+function getPaymentMethodText(method) {
+    const methods = {
+        'cash': '現金',
+        'transfer': '轉帳',
+        'monthly_billing': '月結'
+    };
+    return methods[method] || method;
+}
+
+// Alias functions to match HTML calls
+function viewDelivery(deliveryId) {
+    return viewDeliveryDetails(deliveryId);
+}
+
+function assignDelivery(deliveryId) {
+    return assignDriver(deliveryId);
 }
