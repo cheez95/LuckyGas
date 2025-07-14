@@ -3,7 +3,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
-from datetime import datetime
+from datetime import datetime, date
 
 from core.database import get_db
 from models.database_schema import Client, Delivery
@@ -15,6 +15,7 @@ from ..schemas.client import (
     ClientSearchParams
 )
 from ..schemas.base import PaginationParams, ResponseMessage
+from ..schemas.delivery import DeliveryListResponse, DeliveryResponse
 
 router = APIRouter(
     prefix="/clients",
@@ -58,6 +59,8 @@ async def get_clients(
             keyword_filters.append(Client.address.ilike(f"%{search.keyword}%"))
         if hasattr(Client, 'contact_person'):
             keyword_filters.append(Client.contact_person.ilike(f"%{search.keyword}%"))
+        if hasattr(Client, 'client_code'):
+            keyword_filters.append(Client.client_code.ilike(f"%{search.keyword}%"))
         
         if keyword_filters:
             query = query.filter(or_(*keyword_filters))
@@ -340,6 +343,107 @@ async def update_client_by_code(
     }
     
     return ClientResponse.model_validate(client_data)
+
+
+@router.get("/by-code/{client_code}/deliveries", response_model=DeliveryListResponse, summary="根據客戶編號取得配送單列表")
+async def get_client_deliveries_by_code(
+    client_code: str = Path(..., description="客戶編號", example="1967653"),
+    pagination: PaginationParams = Depends(),
+    status: Optional[str] = Query(None, description="配送狀態篩選"),
+    date_from: Optional[date] = Query(None, description="配送日期起"),
+    date_to: Optional[date] = Query(None, description="配送日期迄"),
+    db: Session = Depends(get_db)
+):
+    """
+    根據客戶編號取得該客戶的配送單列表
+    
+    - **client_code**: 客戶編號
+    - **status**: 配送狀態篩選 (pending, assigned, in_progress, completed, cancelled)
+    - **date_from**: 配送日期起
+    - **date_to**: 配送日期迄
+    - **page**: 頁數
+    - **page_size**: 每頁筆數
+    """
+    # First get the client by client_code
+    client = db.query(Client).filter(Client.client_code == client_code).first()
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="找不到該客戶"
+        )
+    
+    # Query deliveries filtered by client.id
+    query = db.query(Delivery).filter(Delivery.client_id == client.id)
+    
+    # Apply status filter if provided
+    if status:
+        query = query.filter(Delivery.status == status)
+    
+    # Apply date filters if provided
+    if date_from:
+        query = query.filter(Delivery.scheduled_date >= date_from)
+    if date_to:
+        query = query.filter(Delivery.scheduled_date <= date_to)
+    
+    # Get total count
+    total = query.count()
+    
+    # Apply sorting (default by scheduled_date desc)
+    query = query.order_by(Delivery.scheduled_date.desc(), Delivery.created_at.desc())
+    
+    # Apply pagination
+    deliveries = query.offset(pagination.offset).limit(pagination.page_size).all()
+    
+    # Build delivery responses with related data
+    delivery_responses = []
+    for delivery in deliveries:
+        # Calculate total cylinders delivered
+        total_cylinders = (
+            delivery.delivered_50kg + 
+            delivery.delivered_20kg + 
+            delivery.delivered_16kg + 
+            delivery.delivered_10kg + 
+            delivery.delivered_4kg
+        )
+        unit_price = 650  # Default price
+        delivery_fee = 0
+        total_amount = total_cylinders * unit_price + delivery_fee
+        
+        delivery_data = {
+            **delivery.__dict__,
+            "status": delivery.status.value.lower() if hasattr(delivery.status, 'value') else str(delivery.status).replace('DeliveryStatus.', '').lower(),
+            "order_number": f"D{delivery.id:06d}",  # Generate order number
+            "gas_quantity": total_cylinders,
+            "unit_price": unit_price,
+            "delivery_fee": delivery_fee,
+            "total_amount": total_amount,
+            "client_name": client.name,
+            "client_phone": client.phone,
+            "driver_name": delivery.driver.name if delivery.driver else None,
+            "vehicle_plate": delivery.vehicle.plate_number if delivery.vehicle else None,
+            "delivery_address": client.address,
+            "delivery_district": client.district,
+            "delivery_latitude": None,
+            "delivery_longitude": None,
+            "payment_method": "cash",
+            "payment_status": "pending",
+            "paid_at": None,
+            "delivered_at": delivery.actual_delivery_time,
+            "delivery_photo_url": delivery.photo_url,
+            "customer_signature_url": delivery.signature_url,
+            "empty_cylinders_to_return": delivery.returned_50kg + delivery.returned_20kg + delivery.returned_16kg + delivery.returned_10kg + delivery.returned_4kg,
+            "empty_cylinders_returned": delivery.returned_50kg + delivery.returned_20kg + delivery.returned_16kg + delivery.returned_10kg + delivery.returned_4kg if delivery.status == "completed" else 0,
+            "requires_empty_cylinder_return": True if (delivery.returned_50kg + delivery.returned_20kg + delivery.returned_16kg + delivery.returned_10kg + delivery.returned_4kg) > 0 else False
+        }
+        delivery_responses.append(DeliveryResponse.model_validate(delivery_data))
+    
+    return DeliveryListResponse(
+        items=delivery_responses,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total_pages=(total + pagination.page_size - 1) // pagination.page_size
+    )
 
 
 @router.delete("/{client_id}", response_model=ResponseMessage, summary="刪除客戶")
