@@ -377,7 +377,9 @@ async def get_client_deliveries_by_code(
     
     # Apply status filter if provided
     if status:
-        query = query.filter(Delivery.status == status)
+        # Convert lowercase status to uppercase enum value
+        status_upper = status.upper()
+        query = query.filter(Delivery.status == status_upper)
     
     # Apply date filters if provided
     if date_from:
@@ -418,7 +420,7 @@ async def get_client_deliveries_by_code(
             "delivery_fee": delivery_fee,
             "total_amount": total_amount,
             "client_name": client.name,
-            "client_phone": client.phone,
+            "client_phone": None,  # Client model doesn't have phone field
             "driver_name": delivery.driver.name if delivery.driver else None,
             "vehicle_plate": delivery.vehicle.plate_number if delivery.vehicle else None,
             "delivery_address": client.address,
