@@ -14,6 +14,37 @@
         .nav-link:hover {
             transform: translateX(2px);
         }
+        
+        /* Client Detail Modal Tabs */
+        .client-tab-btn {
+            transition: all 0.2s ease;
+        }
+        .client-tab-btn:not(.active):hover {
+            color: #4B5563;
+            border-color: #D1D5DB;
+        }
+        .client-tab-content {
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Delivery table hover effect */
+        .delivery-row:hover {
+            background-color: #F9FAFB;
+            cursor: pointer;
+        }
+        
+        /* Modal animations */
+        .fixed {
+            animation: modalFadeIn 0.2s ease;
+        }
+        @keyframes modalFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -145,7 +176,7 @@
             <div class="bg-white rounded-lg shadow p-4 mb-6">
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div class="md:col-span-2">
-                        <input type="text" id="client-search" placeholder="搜尋客戶名稱、地址或聯絡人..." 
+                        <input type="text" id="client-search" placeholder="搜尋客戶名稱、地址或客戶編號..." 
                                class="w-full px-4 py-2 border rounded focus:outline-none focus:border-blue-500">
                     </div>
                     <select id="client-district" class="px-4 py-2 border rounded focus:outline-none focus:border-blue-500">

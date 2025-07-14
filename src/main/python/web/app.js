@@ -787,6 +787,44 @@ function formatDateTime(dateString) {
     });
 }
 
+function getStatusBadge(status) {
+    const statusConfig = {
+        'pending': { 
+            text: '待配送', 
+            bgColor: 'bg-yellow-100', 
+            textColor: 'text-yellow-800' 
+        },
+        'assigned': { 
+            text: '已分配', 
+            bgColor: 'bg-blue-100', 
+            textColor: 'text-blue-800' 
+        },
+        'in_progress': { 
+            text: '配送中', 
+            bgColor: 'bg-indigo-100', 
+            textColor: 'text-indigo-800' 
+        },
+        'completed': { 
+            text: '已完成', 
+            bgColor: 'bg-green-100', 
+            textColor: 'text-green-800' 
+        },
+        'cancelled': { 
+            text: '已取消', 
+            bgColor: 'bg-red-100', 
+            textColor: 'text-red-800' 
+        }
+    };
+    
+    const config = statusConfig[status] || { 
+        text: status, 
+        bgColor: 'bg-gray-100', 
+        textColor: 'text-gray-800' 
+    };
+    
+    return `<span class="px-2 py-1 text-xs rounded-full ${config.bgColor} ${config.textColor}">${config.text}</span>`;
+}
+
 function capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
@@ -823,62 +861,280 @@ async function viewClient(clientCode) {
         const response = await fetch(`${API_BASE}/clients/by-code/${clientCode}`);
         const client = await response.json();
         
-        // Create modal content
+        // Create modal content with tabs
         const modalContent = `
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <p class="text-sm text-gray-600">客戶名稱</p>
-                    <p class="font-medium">${client.name || client.invoice_title || '-'}</p>
+            <div class="client-detail-modal">
+                <!-- Tabs -->
+                <div class="border-b border-gray-200 mb-4">
+                    <nav class="-mb-px flex space-x-8">
+                        <button onclick="switchClientTab('info')" id="client-info-tab" 
+                                class="client-tab-btn active py-2 px-1 border-b-2 border-blue-500 font-medium text-sm text-blue-600">
+                            客戶資訊
+                        </button>
+                        <button onclick="switchClientTab('deliveries')" id="client-deliveries-tab" 
+                                class="client-tab-btn py-2 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                            配送紀錄
+                        </button>
+                    </nav>
                 </div>
-                <div>
-                    <p class="text-sm text-gray-600">客戶編號</p>
-                    <p class="font-medium">#${client.id}</p>
+                
+                <!-- Tab Content -->
+                <div id="client-info-content" class="client-tab-content">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-sm text-gray-600">客戶名稱</p>
+                            <p class="font-medium">${client.name || client.invoice_title || '-'}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-600">客戶編號</p>
+                            <p class="font-medium">#${client.id}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-600">聯絡人</p>
+                            <p class="font-medium">${client.contact_person || '-'}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-600">統一編號</p>
+                            <p class="font-medium">${client.tax_id || '-'}</p>
+                        </div>
+                        <div class="col-span-2">
+                            <p class="text-sm text-gray-600">地址</p>
+                            <p class="font-medium">${client.address}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-600">區域</p>
+                            <p class="font-medium">${client.district || '-'}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-600">狀態</p>
+                            <p class="font-medium">
+                                <span class="px-2 py-1 text-xs rounded-full ${client.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                                    ${client.is_active ? '啟用' : '停用'}
+                                </span>
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-600">總訂單數</p>
+                            <p class="font-medium">${client.total_orders || 0} 筆</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-600">最後訂單日期</p>
+                            <p class="font-medium">${client.last_order_date ? formatDate(client.last_order_date) : '-'}</p>
+                        </div>
+                        ${client.notes ? `
+                        <div class="col-span-2">
+                            <p class="text-sm text-gray-600">備註</p>
+                            <p class="font-medium">${client.notes}</p>
+                        </div>
+                        ` : ''}
+                    </div>
                 </div>
-                <div>
-                    <p class="text-sm text-gray-600">聯絡人</p>
-                    <p class="font-medium">${client.contact_person || '-'}</p>
+                
+                <div id="client-deliveries-content" class="client-tab-content hidden">
+                    <div id="client-deliveries-loading" class="text-center py-8">
+                        <i class="fas fa-spinner fa-spin text-3xl text-gray-400"></i>
+                        <p class="text-gray-500 mt-2">載入配送紀錄中...</p>
+                    </div>
+                    <div id="client-deliveries-container" class="hidden"></div>
                 </div>
-                <div>
-                    <p class="text-sm text-gray-600">統一編號</p>
-                    <p class="font-medium">${client.tax_id || '-'}</p>
-                </div>
-                <div class="col-span-2">
-                    <p class="text-sm text-gray-600">地址</p>
-                    <p class="font-medium">${client.address}</p>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-600">區域</p>
-                    <p class="font-medium">${client.district || '-'}</p>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-600">狀態</p>
-                    <p class="font-medium">
-                        <span class="px-2 py-1 text-xs rounded-full ${client.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
-                            ${client.is_active ? '啟用' : '停用'}
-                        </span>
-                    </p>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-600">總訂單數</p>
-                    <p class="font-medium">${client.total_orders || 0} 筆</p>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-600">最後訂單日期</p>
-                    <p class="font-medium">${client.last_order_date ? formatDate(client.last_order_date) : '-'}</p>
-                </div>
-                ${client.notes ? `
-                <div class="col-span-2">
-                    <p class="text-sm text-gray-600">備註</p>
-                    <p class="font-medium">${client.notes}</p>
-                </div>
-                ` : ''}
             </div>
         `;
         
         showModal('客戶詳細資料', modalContent);
+        
+        // Store client code for deliveries loading
+        window.currentViewingClientCode = clientCode;
+        
     } catch (error) {
         showNotification('載入客戶資料失敗', 'error');
     }
+}
+
+// Tab switching function
+function switchClientTab(tab) {
+    // Update tab buttons
+    document.querySelectorAll('.client-tab-btn').forEach(btn => {
+        btn.classList.remove('active', 'border-blue-500', 'text-blue-600');
+        btn.classList.add('border-transparent', 'text-gray-500');
+    });
+    
+    const activeTab = document.getElementById(`client-${tab}-tab`);
+    activeTab.classList.remove('border-transparent', 'text-gray-500');
+    activeTab.classList.add('active', 'border-blue-500', 'text-blue-600');
+    
+    // Update content
+    document.querySelectorAll('.client-tab-content').forEach(content => {
+        content.classList.add('hidden');
+    });
+    
+    document.getElementById(`client-${tab}-content`).classList.remove('hidden');
+    
+    // Load deliveries if switching to deliveries tab
+    if (tab === 'deliveries' && window.currentViewingClientCode) {
+        loadClientDeliveries(window.currentViewingClientCode);
+    }
+}
+
+// Load client deliveries
+async function loadClientDeliveries(clientCode, page = 1) {
+    try {
+        const loadingDiv = document.getElementById('client-deliveries-loading');
+        const containerDiv = document.getElementById('client-deliveries-container');
+        
+        // Show loading
+        loadingDiv.classList.remove('hidden');
+        containerDiv.classList.add('hidden');
+        
+        // Fetch deliveries
+        const response = await fetch(`${API_BASE}/clients/by-code/${clientCode}/deliveries?page=${page}&page_size=10`);
+        const data = await response.json();
+        
+        // Hide loading
+        loadingDiv.classList.add('hidden');
+        containerDiv.classList.remove('hidden');
+        
+        // Render deliveries
+        renderClientDeliveries(data, clientCode);
+        
+    } catch (error) {
+        console.error('Error loading client deliveries:', error);
+        document.getElementById('client-deliveries-loading').classList.add('hidden');
+        document.getElementById('client-deliveries-container').innerHTML = `
+            <div class="text-center py-8 text-red-600">
+                <i class="fas fa-exclamation-circle text-3xl mb-2"></i>
+                <p>載入配送紀錄失敗</p>
+            </div>
+        `;
+        document.getElementById('client-deliveries-container').classList.remove('hidden');
+    }
+}
+
+// Render client deliveries
+function renderClientDeliveries(data, clientCode) {
+    const container = document.getElementById('client-deliveries-container');
+    
+    if (!data.items || data.items.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-8 text-gray-500">
+                <i class="fas fa-box-open text-3xl mb-2"></i>
+                <p>尚無配送紀錄</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Calculate summary statistics
+    const stats = calculateDeliveryStats(data.items);
+    
+    container.innerHTML = `
+        <!-- Summary Statistics -->
+        <div class="grid grid-cols-4 gap-4 mb-6">
+            <div class="bg-blue-50 rounded-lg p-4">
+                <p class="text-sm text-blue-600">總配送次數</p>
+                <p class="text-2xl font-bold text-blue-800">${stats.totalCount}</p>
+            </div>
+            <div class="bg-green-50 rounded-lg p-4">
+                <p class="text-sm text-green-600">已完成</p>
+                <p class="text-2xl font-bold text-green-800">${stats.completed}</p>
+            </div>
+            <div class="bg-purple-50 rounded-lg p-4">
+                <p class="text-sm text-purple-600">總瓦斯量</p>
+                <p class="text-2xl font-bold text-purple-800">${stats.totalGas.toFixed(1)} 公斤</p>
+            </div>
+            <div class="bg-orange-50 rounded-lg p-4">
+                <p class="text-sm text-orange-600">總金額</p>
+                <p class="text-2xl font-bold text-orange-800">$${stats.totalAmount.toLocaleString()}</p>
+            </div>
+        </div>
+        
+        <!-- Deliveries Table -->
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">訂單編號</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">配送日期</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">狀態</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">瓦斯量</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">金額</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">司機</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    ${data.items.map(delivery => `
+                        <tr class="hover:bg-gray-50 cursor-pointer transition-colors" onclick="viewDelivery(${delivery.id})">
+                            <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                #${delivery.order_number || delivery.id}
+                            </td>
+                            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                ${formatDate(delivery.scheduled_date)}
+                            </td>
+                            <td class="px-4 py-3 whitespace-nowrap">
+                                ${getStatusBadge(delivery.status)}
+                            </td>
+                            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                ${delivery.total_quantity || 0} kg
+                            </td>
+                            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-medium">
+                                $${(delivery.total_amount || 0).toLocaleString()}
+                            </td>
+                            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                ${delivery.driver_name || '-'}
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        ${data.total_pages > 1 ? `
+            <div class="flex justify-center mt-4">
+                <nav class="flex space-x-2">
+                    ${data.page > 1 ? `
+                        <button onclick="loadClientDeliveries('${clientCode}', ${data.page - 1})" 
+                                class="px-3 py-1 text-sm bg-white border rounded hover:bg-gray-50">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                    ` : ''}
+                    
+                    ${Array.from({length: Math.min(5, data.total_pages)}, (_, i) => {
+                        const pageNum = i + 1;
+                        const isActive = pageNum === data.page;
+                        return `
+                            <button onclick="loadClientDeliveries('${clientCode}', ${pageNum})" 
+                                    class="px-3 py-1 text-sm ${isActive ? 'bg-blue-500 text-white' : 'bg-white text-gray-700'} border rounded hover:bg-gray-50">
+                                ${pageNum}
+                            </button>
+                        `;
+                    }).join('')}
+                    
+                    ${data.page < data.total_pages ? `
+                        <button onclick="loadClientDeliveries('${clientCode}', ${data.page + 1})" 
+                                class="px-3 py-1 text-sm bg-white border rounded hover:bg-gray-50">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    ` : ''}
+                </nav>
+            </div>
+        ` : ''}
+    `;
+}
+
+// Calculate delivery statistics
+function calculateDeliveryStats(deliveries) {
+    return deliveries.reduce((stats, delivery) => {
+        stats.totalCount++;
+        if (delivery.status === 'completed') stats.completed++;
+        stats.totalGas += delivery.total_quantity || 0;
+        stats.totalAmount += delivery.total_amount || 0;
+        return stats;
+    }, {
+        totalCount: 0,
+        completed: 0,
+        totalGas: 0,
+        totalAmount: 0
+    });
 }
 
 async function toggleClientStatus(clientCode, currentStatus) {
@@ -907,7 +1163,7 @@ function showModal(title, content, actions = '') {
     const modal = document.createElement('div');
     modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
     modal.innerHTML = `
-        <div class="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+        <div class="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-xl font-bold">${title}</h3>
                 <button onclick="this.closest('.fixed').remove()" class="text-gray-500 hover:text-gray-700">
