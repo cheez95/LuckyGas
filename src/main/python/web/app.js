@@ -458,13 +458,13 @@ function renderClientsTable(clients) {
                 </span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm">
-                <button onclick="viewClient(${client.id})" class="text-blue-600 hover:text-blue-900 mr-2" title="檢視">
+                <button onclick="viewClient('${client.client_code}')" class="text-blue-600 hover:text-blue-900 mr-2" title="檢視">
                     <i class="fas fa-eye"></i>
                 </button>
-                <button onclick="editClient(${client.id})" class="text-green-600 hover:text-green-900 mr-2" title="編輯">
+                <button onclick="editClient('${client.client_code}')" class="text-green-600 hover:text-green-900 mr-2" title="編輯">
                     <i class="fas fa-edit"></i>
                 </button>
-                <button onclick="toggleClientStatus(${client.id}, ${client.is_active})" class="text-orange-600 hover:text-orange-900" title="${client.is_active ? '停用' : '啟用'}">
+                <button onclick="toggleClientStatus('${client.client_code}', ${client.is_active})" class="text-orange-600 hover:text-orange-900" title="${client.is_active ? '停用' : '啟用'}">
                     <i class="fas fa-${client.is_active ? 'pause' : 'play'}"></i>
                 </button>
             </td>
@@ -818,9 +818,9 @@ function showNotification(message, type = 'info') {
 }
 
 // Enhanced client functions
-async function viewClient(clientId) {
+async function viewClient(clientCode) {
     try {
-        const response = await fetch(`${API_BASE}/clients/${clientId}`);
+        const response = await fetch(`${API_BASE}/clients/by-code/${clientCode}`);
         const client = await response.json();
         
         // Create modal content
@@ -881,11 +881,11 @@ async function viewClient(clientId) {
     }
 }
 
-async function toggleClientStatus(clientId, currentStatus) {
+async function toggleClientStatus(clientCode, currentStatus) {
     if (!confirm(`確定要${currentStatus ? '停用' : '啟用'}此客戶嗎？`)) return;
     
     try {
-        const response = await fetch(`${API_BASE}/clients/${clientId}`, {
+        const response = await fetch(`${API_BASE}/clients/by-code/${clientCode}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ is_active: !currentStatus })
@@ -981,9 +981,9 @@ async function refreshStats() {
 }
 
 // Edit functions for CRUD operations
-async function editClient(clientId) {
+async function editClient(clientCode) {
     try {
-        const response = await fetch(`${API_BASE}/clients/${clientId}`);
+        const response = await fetch(`${API_BASE}/clients/by-code/${clientCode}`);
         const client = await response.json();
         
         // Create a modal dialog for editing
@@ -1039,7 +1039,7 @@ async function editClient(clientId) {
             }
             
             try {
-                const updateResponse = await fetch(`${API_BASE}/clients/${clientId}`, {
+                const updateResponse = await fetch(`${API_BASE}/clients/by-code/${clientCode}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(updateData)

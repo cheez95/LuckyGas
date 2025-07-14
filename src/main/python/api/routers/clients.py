@@ -149,6 +149,39 @@ async def get_client(
     return ClientResponse.model_validate(client_data)
 
 
+@router.get("/by-code/{client_code}", response_model=ClientResponse, summary="根據客戶編號取得詳細資料")
+async def get_client_by_code(
+    client_code: str = Path(..., description="客戶編號", example="1967653"),
+    db: Session = Depends(get_db)
+):
+    """
+    根據客戶編號取得特定客戶的詳細資料
+    """
+    client = db.query(Client).filter(Client.client_code == client_code).first()
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="找不到該客戶"
+        )
+    
+    # Get order statistics
+    total_orders = db.query(func.count(Delivery.id)).filter(
+        Delivery.client_id == client.id
+    ).scalar() or 0
+    
+    last_order = db.query(Delivery).filter(
+        Delivery.client_id == client.id
+    ).order_by(Delivery.created_at.desc()).first()
+    
+    client_data = {
+        **client.__dict__,
+        "total_orders": total_orders,
+        "last_order_date": last_order.created_at if last_order else None
+    }
+    
+    return ClientResponse.model_validate(client_data)
+
+
 @router.post("", response_model=ClientResponse, status_code=status.HTTP_201_CREATED, summary="新增客戶")
 async def create_client(client: ClientCreate, db: Session = Depends(get_db)):
     """
@@ -214,6 +247,67 @@ async def update_client(
         existing_tax = db.query(Client).filter(
             Client.tax_id == update_data["tax_id"],
             Client.id != client_id
+        ).first()
+        if existing_tax:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="該統一編號已被使用"
+            )
+    
+    # Update fields
+    for field, value in update_data.items():
+        setattr(client, field, value)
+    
+    client.updated_at = datetime.now()
+    
+    db.commit()
+    db.refresh(client)
+    
+    # Get statistics
+    total_orders = db.query(func.count(Delivery.id)).filter(
+        Delivery.client_id == client.id
+    ).scalar() or 0
+    
+    last_order = db.query(Delivery).filter(
+        Delivery.client_id == client.id
+    ).order_by(Delivery.created_at.desc()).first()
+    
+    client_data = {
+        **client.__dict__,
+        "total_orders": total_orders,
+        "last_order_date": last_order.created_at if last_order else None
+    }
+    
+    return ClientResponse.model_validate(client_data)
+
+
+@router.put("/by-code/{client_code}", response_model=ClientResponse, summary="根據客戶編號更新資料")
+async def update_client_by_code(
+    client_code: str,
+    client_update: ClientUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    根據客戶編號更新客戶資料
+    
+    - 只需提供要更新的欄位
+    - 統一編號若重複會回傳錯誤
+    """
+    client = db.query(Client).filter(Client.client_code == client_code).first()
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="找不到該客戶"
+        )
+    
+    # Update only provided fields
+    update_data = client_update.model_dump(exclude_unset=True)
+    
+    # Check tax_id uniqueness if updating
+    if "tax_id" in update_data and update_data["tax_id"] != client.tax_id:
+        existing_tax = db.query(Client).filter(
+            Client.tax_id == update_data["tax_id"],
+            Client.id != client.id
         ).first()
         if existing_tax:
             raise HTTPException(
