@@ -2,8 +2,8 @@
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, func
-from datetime import datetime, date, timedelta
+from sqlalchemy import func
+from datetime import datetime, date
 
 from core.database import get_db
 from models.database_schema import Delivery, Client, Driver, Vehicle, DeliveryStatus
@@ -15,6 +15,14 @@ from ..schemas.delivery import (
     DeliverySearchParams
 )
 from ..schemas.base import PaginationParams, ResponseMessage
+from ..utils import (
+    build_delivery_response,
+    normalize_status,
+    format_status_for_response,
+    apply_date_range_filter,
+    apply_keyword_search,
+    apply_sorting
+)
 
 router = APIRouter(
     prefix="/deliveries",
@@ -26,26 +34,6 @@ router = APIRouter(
 )
 
 
-def generate_order_number(db: Session) -> str:
-    """Generate unique order number"""
-    today = datetime.now()
-    prefix = f"D{today.strftime('%Y%m%d')}"
-    
-    # Get today's max order number
-    last_order = db.query(Delivery).filter(
-        func.date(Delivery.created_at) == today.date()
-    ).order_by(Delivery.id.desc()).first()
-    
-    if last_order and hasattr(last_order, 'order_number') and last_order.order_number.startswith(prefix):
-        try:
-            last_num = int(last_order.order_number[-4:])
-            next_num = last_num + 1
-        except:
-            next_num = 1
-    else:
-        next_num = 1
-    
-    return f"{prefix}{next_num:04d}"
 
 
 @router.get("", response_model=DeliveryListResponse, summary="取得配送單列表")
@@ -73,11 +61,7 @@ async def get_deliveries(
     
     # Apply filters
     if search.keyword:
-        keyword_filter = or_(
-            Client.name.ilike(f"%{search.keyword}%"),
-            Client.address.ilike(f"%{search.keyword}%")
-        )
-        query = query.filter(keyword_filter)
+        query = apply_keyword_search(query, search.keyword, Client.name, Client.address)
     
     if search.client_id:
         query = query.filter(Delivery.client_id == search.client_id)
@@ -86,36 +70,14 @@ async def get_deliveries(
         query = query.filter(Delivery.driver_id == search.driver_id)
     
     if search.status:
-        # Normalize the status to lowercase for comparison
-        normalized_status = search.status.lower()
-        
-        # Map common variations to enum values
-        status_map = {
-            'pending': DeliveryStatus.PENDING,
-            'assigned': DeliveryStatus.ASSIGNED,
-            'in_progress': DeliveryStatus.IN_PROGRESS,
-            'in progress': DeliveryStatus.IN_PROGRESS,
-            'completed': DeliveryStatus.COMPLETED,
-            'cancelled': DeliveryStatus.CANCELLED,
-            'canceled': DeliveryStatus.CANCELLED  # Alternative spelling
-        }
-        
-        if normalized_status in status_map:
-            query = query.filter(Delivery.status == status_map[normalized_status])
-        else:
-            # Try uppercase enum name as fallback
-            try:
-                status_enum = DeliveryStatus[search.status.upper()]
-                query = query.filter(Delivery.status == status_enum)
-            except KeyError:
-                # Skip invalid status values
-                pass
+        status_enum = normalize_status(search.status)
+        if status_enum:
+            query = query.filter(Delivery.status == status_enum)
     
-    if search.scheduled_date_from:
-        query = query.filter(Delivery.scheduled_date >= search.scheduled_date_from)
-    
-    if search.scheduled_date_to:
-        query = query.filter(Delivery.scheduled_date <= search.scheduled_date_to)
+    query = apply_date_range_filter(
+        query, Delivery.scheduled_date,
+        search.scheduled_date_from, search.scheduled_date_to
+    )
     
     if search.district:
         query = query.filter(Client.district == search.district)
@@ -124,19 +86,13 @@ async def get_deliveries(
     total = query.count()
     
     # Apply sorting
-    if search.order_by == "scheduled_date":
-        order_column = Delivery.scheduled_date
-    elif search.order_by == "created_at":
-        order_column = Delivery.created_at
-    elif search.order_by == "status":
-        order_column = Delivery.status
-    else:
-        order_column = Delivery.scheduled_date
-    
-    if search.order_desc:
-        query = query.order_by(order_column.desc())
-    else:
-        query = query.order_by(order_column)
+    order_column_map = {
+        "scheduled_date": Delivery.scheduled_date,
+        "created_at": Delivery.created_at,
+        "status": Delivery.status
+    }
+    order_column = order_column_map.get(search.order_by, Delivery.scheduled_date)
+    query = apply_sorting(query, order_column, search.order_desc)
     
     # Apply pagination
     deliveries = query.offset(pagination.offset).limit(pagination.page_size).all()
@@ -144,43 +100,7 @@ async def get_deliveries(
     # Convert to response model
     delivery_responses = []
     for delivery in deliveries:
-        # Get related data
-        client = delivery.client
-        driver = delivery.driver if delivery.driver_id else None
-        vehicle = delivery.vehicle if delivery.vehicle_id else None
-        
-        # Calculate total amount (simplified)
-        total_cylinders = (
-            delivery.delivered_50kg + delivery.delivered_20kg + 
-            delivery.delivered_16kg + delivery.delivered_10kg + 
-            delivery.delivered_4kg
-        )
-        unit_price = 650  # Default price
-        delivery_fee = 0
-        total_amount = total_cylinders * unit_price + delivery_fee
-        
-        delivery_data = {
-            **delivery.__dict__,
-            "status": delivery.status.value.lower() if hasattr(delivery.status, 'value') else str(delivery.status).replace('DeliveryStatus.', '').lower(),
-            "order_number": generate_order_number(db) if not hasattr(delivery, 'order_number') else delivery.order_number,
-            "gas_quantity": total_cylinders,
-            "unit_price": unit_price,
-            "delivery_fee": delivery_fee,
-            "total_amount": total_amount,
-            "delivery_address": client.address,
-            "delivery_district": client.district,
-            "payment_method": "cash",  # Default
-            "payment_status": "pending",  # Default
-            "client_name": client.name if client.name else client.invoice_title,
-            "client_phone": None,
-            "driver_name": driver.name if driver else None,
-            "vehicle_plate": vehicle.plate_number if vehicle else None,
-            "scheduled_time_slot": f"{delivery.scheduled_time_start}-{delivery.scheduled_time_end}" if delivery.scheduled_time_start else None,
-            "delivered_at": delivery.actual_delivery_time,
-            "empty_cylinders_to_return": delivery.returned_50kg + delivery.returned_20kg + delivery.returned_16kg + delivery.returned_10kg + delivery.returned_4kg,
-            "empty_cylinders_returned": delivery.returned_50kg + delivery.returned_20kg + delivery.returned_16kg + delivery.returned_10kg + delivery.returned_4kg,
-            "requires_empty_cylinder_return": True if (delivery.returned_50kg + delivery.returned_20kg + delivery.returned_16kg + delivery.returned_10kg + delivery.returned_4kg) > 0 else False
-        }
+        delivery_data = build_delivery_response(delivery, db)
         delivery_responses.append(DeliveryResponse.model_validate(delivery_data))
     
     return DeliveryListResponse(
@@ -204,44 +124,8 @@ async def get_delivery(delivery_id: int, db: Session = Depends(get_db)):
             detail="找不到該配送單"
         )
     
-    # Get related data
-    client = delivery.client
-    driver = delivery.driver if delivery.driver_id else None
-    vehicle = delivery.vehicle if delivery.vehicle_id else None
-    
-    # Calculate total amount
-    total_cylinders = (
-        delivery.delivered_50kg + delivery.delivered_20kg + 
-        delivery.delivered_16kg + delivery.delivered_10kg + 
-        delivery.delivered_4kg
-    )
-    unit_price = 650
-    delivery_fee = 0
-    total_amount = total_cylinders * unit_price + delivery_fee
-    
-    delivery_data = {
-        **delivery.__dict__,
-        "status": delivery.status.value.lower() if hasattr(delivery.status, 'value') else str(delivery.status).replace('DeliveryStatus.', '').lower(),
-        "order_number": generate_order_number(db) if not hasattr(delivery, 'order_number') else delivery.order_number,
-        "gas_quantity": total_cylinders,
-        "unit_price": unit_price,
-        "delivery_fee": delivery_fee,
-        "total_amount": total_amount,
-        "delivery_address": client.address,
-        "delivery_district": client.district,
-        "payment_method": "cash",
-        "payment_status": "pending",
-        "client_name": client.name if client.name else client.invoice_title,
-        "client_phone": None,
-        "driver_name": driver.name if driver else None,
-        "vehicle_plate": vehicle.plate_number if vehicle else None,
-        "scheduled_time_slot": f"{delivery.scheduled_time_start}-{delivery.scheduled_time_end}" if delivery.scheduled_time_start else None,
-        "delivered_at": delivery.actual_delivery_time,
-        "empty_cylinders_to_return": delivery.returned_50kg + delivery.returned_20kg + delivery.returned_16kg + delivery.returned_10kg + delivery.returned_4kg,
-        "empty_cylinders_returned": delivery.returned_50kg + delivery.returned_20kg + delivery.returned_16kg + delivery.returned_10kg + delivery.returned_4kg,
-        "requires_empty_cylinder_return": True if (delivery.returned_50kg + delivery.returned_20kg + delivery.returned_16kg + delivery.returned_10kg + delivery.returned_4kg) > 0 else False
-    }
-    
+    # Build response using utility
+    delivery_data = build_delivery_response(delivery, db)
     return DeliveryResponse.model_validate(delivery_data)
 
 
@@ -282,33 +166,22 @@ async def create_delivery(delivery: DeliveryCreate, db: Session = Depends(get_db
     db.commit()
     db.refresh(db_delivery)
     
-    # Return response
-    total_cylinders = delivery.gas_quantity
-    unit_price = float(delivery.unit_price)
-    delivery_fee = float(delivery.delivery_fee)
-    total_amount = total_cylinders * unit_price + delivery_fee
-    
-    delivery_data = {
-        **db_delivery.__dict__,
-        "status": db_delivery.status.value.lower() if hasattr(db_delivery.status, 'value') else str(db_delivery.status).replace('DeliveryStatus.', '').lower(),
-        "order_number": generate_order_number(db),
-        "gas_quantity": total_cylinders,
-        "unit_price": unit_price,
-        "delivery_fee": delivery_fee,
-        "total_amount": total_amount,
+    # Build response using utility and merge with additional create-specific data
+    delivery_data = build_delivery_response(db_delivery, db)
+    # Override/add create-specific fields
+    delivery_data.update({
+        "unit_price": float(delivery.unit_price),
+        "delivery_fee": float(delivery.delivery_fee),
+        "total_amount": delivery.gas_quantity * float(delivery.unit_price) + float(delivery.delivery_fee),
         "delivery_address": delivery.delivery_address,
         "delivery_district": delivery.delivery_district,
         "delivery_latitude": delivery.delivery_latitude,
         "delivery_longitude": delivery.delivery_longitude,
         "payment_method": delivery.payment_method,
-        "payment_status": "pending",
-        "client_name": client.invoice_title,
-        "client_phone": None,
         "scheduled_time_slot": delivery.scheduled_time_slot,
         "empty_cylinders_to_return": delivery.empty_cylinders_to_return,
-        "empty_cylinders_returned": 0,
         "requires_empty_cylinder_return": delivery.requires_empty_cylinder_return
-    }
+    })
     
     return DeliveryResponse.model_validate(delivery_data)
 
@@ -342,34 +215,17 @@ async def update_delivery(
     
     # Handle status update
     if "status" in update_data:
-        # Normalize the status to lowercase for comparison
-        normalized_status = update_data["status"].lower()
+        status_enum = normalize_status(update_data["status"])
+        if not status_enum:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status: {update_data['status']}"
+            )
         
-        # Map common variations to enum values
-        status_map = {
-            'pending': DeliveryStatus.PENDING,
-            'assigned': DeliveryStatus.ASSIGNED,
-            'in_progress': DeliveryStatus.IN_PROGRESS,
-            'in progress': DeliveryStatus.IN_PROGRESS,
-            'completed': DeliveryStatus.COMPLETED,
-            'cancelled': DeliveryStatus.CANCELLED,
-            'canceled': DeliveryStatus.CANCELLED
-        }
-        
-        if normalized_status in status_map:
-            delivery.status = status_map[normalized_status]
-        else:
-            # Try uppercase enum name as fallback
-            try:
-                delivery.status = DeliveryStatus[update_data["status"].upper()]
-            except KeyError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid status: {update_data['status']}"
-                )
+        delivery.status = status_enum
         
         # If marking as completed, set delivered_at
-        if normalized_status == "completed" and not delivery.actual_delivery_time:
+        if status_enum == DeliveryStatus.COMPLETED and not delivery.actual_delivery_time:
             delivery.actual_delivery_time = update_data.get("delivered_at", datetime.now())
     
     # Handle driver assignment
@@ -426,45 +282,15 @@ async def update_delivery(
     db.commit()
     db.refresh(delivery)
     
-    # Get related data for response
-    client = delivery.client
-    driver = delivery.driver if delivery.driver_id else None
-    vehicle = delivery.vehicle if delivery.vehicle_id else None
-    
-    # Calculate total amount
-    total_cylinders = (
-        delivery.delivered_50kg + delivery.delivered_20kg + 
-        delivery.delivered_16kg + delivery.delivered_10kg + 
-        delivery.delivered_4kg
-    )
-    unit_price = 650
-    delivery_fee = 0
-    total_amount = total_cylinders * unit_price + delivery_fee
-    
-    delivery_data = {
-        **delivery.__dict__,
-        "order_number": generate_order_number(db) if not hasattr(delivery, 'order_number') else delivery.order_number,
-        "gas_quantity": total_cylinders,
-        "unit_price": unit_price,
-        "delivery_fee": delivery_fee,
-        "total_amount": total_amount,
-        "delivery_address": client.address,
-        "delivery_district": client.area,
-        "payment_method": update_data.get("payment_method", "cash"),
-        "payment_status": update_data.get("payment_status", "pending"),
-        "paid_at": update_data.get("paid_at"),
-        "client_name": client.invoice_title,
-        "client_phone": None,
-        "driver_name": driver.name if driver else None,
-        "vehicle_plate": vehicle.plate_number if vehicle else None,
-        "scheduled_time_slot": f"{delivery.scheduled_time_start}-{delivery.scheduled_time_end}" if delivery.scheduled_time_start else None,
-        "delivered_at": delivery.actual_delivery_time,
-        "delivery_photo_url": delivery.photo_url,
-        "customer_signature_url": delivery.signature_url,
-        "empty_cylinders_to_return": delivery.returned_50kg + delivery.returned_20kg + delivery.returned_16kg + delivery.returned_10kg + delivery.returned_4kg,
-        "empty_cylinders_returned": delivery.returned_50kg + delivery.returned_20kg + delivery.returned_16kg + delivery.returned_10kg + delivery.returned_4kg,
-        "requires_empty_cylinder_return": True if (delivery.returned_50kg + delivery.returned_20kg + delivery.returned_16kg + delivery.returned_10kg + delivery.returned_4kg) > 0 else False
-    }
+    # Build response using utility and merge with update-specific data
+    delivery_data = build_delivery_response(delivery, db)
+    # Add update-specific fields that might have been provided
+    if "payment_method" in update_data:
+        delivery_data["payment_method"] = update_data["payment_method"]
+    if "payment_status" in update_data:
+        delivery_data["payment_status"] = update_data["payment_status"]
+    if "paid_at" in update_data:
+        delivery_data["paid_at"] = update_data["paid_at"]
     
     return DeliveryResponse.model_validate(delivery_data)
 
@@ -485,7 +311,7 @@ async def cancel_delivery(delivery_id: int, db: Session = Depends(get_db)):
     if delivery.status in [DeliveryStatus.COMPLETED, DeliveryStatus.CANCELLED]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"狀態為 {delivery.status.value.lower()} 的配送單無法取消"
+            detail=f"狀態為 {format_status_for_response(delivery.status)} 的配送單無法取消"
         )
     
     # Cancel delivery
@@ -596,15 +422,10 @@ async def get_today_summary(db: Session = Depends(get_db)):
     }
     
     for status, count in status_counts:
-        # Handle both enum and string values from database
-        if hasattr(status, 'value'):
-            status_key = status.value
-        else:
-            status_key = str(status).lower()
-        
-        # Ensure lowercase for consistency
-        if status_key.lower() in status_summary:
-            status_summary[status_key.lower()] = count
+        # Use utility to format status
+        status_key = format_status_for_response(status)
+        if status_key in status_summary:
+            status_summary[status_key] = count
     
     # Driver workload
     driver_counts = db.query(
