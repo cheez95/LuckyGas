@@ -20,6 +20,9 @@ sys.path.append(str(Path(__file__).parent.parent))
 from models.database_schema import Client, Delivery, Driver, Vehicle, Route, DeliveryStatus, VehicleType
 from integrations.google_maps_client import GoogleMapsClient, Location
 from config.cloud_config import cloud_config
+from utils.geo_utils import calculate_haversine_distance
+from utils.time_utils import parse_client_time_windows, calculate_service_time
+from utils.vehicle_utils import calculate_required_vehicle_type
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +52,7 @@ class VehicleInfo:
     max_duration: int = 480  # minutes (8 hours)
     speed_factor: float = 1.0  # Speed multiplier
     cost_per_km: float = 10.0  # Cost per kilometer
-    vehicle_type: VehicleType = VehicleType.TRUCK
+    vehicle_type: VehicleType = VehicleType.CAR
 
 
 @dataclass
@@ -431,17 +434,19 @@ class CloudRouteOptimizationService:
     
     def _get_required_vehicle_type(self, demand: Dict[str, int]) -> VehicleType:
         """Determine required vehicle type based on demand"""
-        total_cylinders = sum(demand.values())
+        # Use shared utility to calculate vehicle requirements
+        deliveries = [{'cylinder_type': k, 'quantity': v} for k, v in demand.items()]
+        vehicle_type_needed = calculate_required_vehicle_type(deliveries)
         
-        # Large trucks for 50kg cylinders or high volume
-        if demand.get('50kg', 0) > 0 or total_cylinders > 20:
-            return VehicleType.TRUCK
-        # Vans for medium loads
-        elif total_cylinders > 5:
-            return VehicleType.VAN
-        # Motorcycles for small loads
+        # Map our vehicle utilities types to database VehicleType
+        # Since database only has CAR and MOTORCYCLE, we map accordingly
+        from utils.vehicle_utils import VehicleType as UtilVehicleType
+        
+        if vehicle_type_needed in [UtilVehicleType.SMALL, UtilVehicleType.MEDIUM]:
+            return VehicleType.MOTORCYCLE if sum(demand.values()) <= 5 else VehicleType.CAR
         else:
-            return VehicleType.MOTORCYCLE
+            # For LARGE and EXTRA_LARGE, always use CAR
+            return VehicleType.CAR
     
     async def recalculate_route(
         self,
@@ -530,7 +535,7 @@ class CloudRouteOptimizationService:
             nearest = -1
             
             for idx in unvisited:
-                dist = self._haversine_distance(
+                dist = calculate_haversine_distance(
                     current.lat, current.lng,
                     nodes[idx].location.lat, nodes[idx].location.lng
                 )
@@ -546,18 +551,120 @@ class CloudRouteOptimizationService:
         
         return sequence
     
-    def _haversine_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-        """Calculate distance between two points using Haversine formula"""
-        from math import radians, sin, cos, sqrt, atan2
+    async def preview_routes_for_schedule(
+        self,
+        schedule_data: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Preview routes for a given schedule"""
+        routes = []
         
-        R = 6371  # Earth's radius in kilometers
+        # Extract deliveries from all time slots
+        all_deliveries = []
+        for slot in schedule_data.get('time_slots', []):
+            all_deliveries.extend(slot.get('deliveries', []))
         
-        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+        if not all_deliveries:
+            return routes
         
-        dlat = lat2 - lat1
-        dlon = lon2 - lon1
+        # Group deliveries by area or some logical grouping
+        delivery_groups = {}
+        for delivery in all_deliveries:
+            area = delivery.get('area', 'default')
+            if area not in delivery_groups:
+                delivery_groups[area] = []
+            delivery_groups[area].append(delivery)
         
-        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-        c = 2 * atan2(sqrt(a), sqrt(1-a))
+        # Create preview routes for each group
+        route_id = 1
+        for area, deliveries in delivery_groups.items():
+            route = {
+                'route_id': f"preview_{route_id}",
+                'area': area,
+                'deliveries': deliveries,
+                'estimated_distance': len(deliveries) * 5.5,  # Rough estimate
+                'estimated_duration': len(deliveries) * 15,  # 15 min per delivery
+                'driver': f"Driver {route_id}",
+                'vehicle': f"Vehicle {route_id}",
+                'optimization_status': 'preview'
+            }
+            routes.append(route)
+            route_id += 1
         
-        return R * c
+        return routes
+    
+    async def optimize_for_date(
+        self,
+        target_date: date,
+        delivery_ids: List[int]
+    ) -> Dict[str, Any]:
+        """Optimize routes for deliveries on a specific date"""
+        try:
+            # Get deliveries
+            deliveries = self.session.query(Delivery).filter(
+                Delivery.id.in_(delivery_ids)
+            ).all()
+            
+            if not deliveries:
+                return {'success': False, 'error': 'No deliveries found'}
+            
+            # Get available drivers and vehicles
+            drivers = self.session.query(Driver).filter(
+                Driver.is_active == True
+            ).all()
+            
+            vehicles = self.session.query(Vehicle).filter(
+                Vehicle.is_active == True
+            ).all()
+            
+            # Prepare optimization request
+            # In a real implementation, this would call the full optimization
+            # For now, create simple routes
+            routes_created = []
+            deliveries_per_route = 10
+            
+            for i in range(0, len(deliveries), deliveries_per_route):
+                route_deliveries = deliveries[i:i+deliveries_per_route]
+                driver = drivers[i % len(drivers)] if drivers else None
+                vehicle = vehicles[i % len(vehicles)] if vehicles else None
+                
+                if not driver or not vehicle:
+                    continue
+                
+                # Create route
+                route = Route(
+                    driver_id=driver.id,
+                    vehicle_id=vehicle.id,
+                    route_date=target_date,
+                    status='planned',
+                    created_at=datetime.now()
+                )
+                self.session.add(route)
+                self.session.flush()
+                
+                # Assign deliveries to route
+                for delivery in route_deliveries:
+                    delivery.route_id = route.id
+                    delivery.status = DeliveryStatus.ASSIGNED
+                
+                routes_created.append(route)
+            
+            self.session.commit()
+            
+            return {
+                'success': True,
+                'routes': [
+                    {
+                        'id': r.id,
+                        'driver_id': r.driver_id,
+                        'vehicle_id': r.vehicle_id,
+                        'delivery_count': len([d for d in deliveries if d.route_id == r.id])
+                    }
+                    for r in routes_created
+                ]
+            }
+            
+        except Exception as e:
+            logger.error(f"Error optimizing routes: {str(e)}")
+            self.session.rollback()
+            return {'success': False, 'error': str(e)}
+    

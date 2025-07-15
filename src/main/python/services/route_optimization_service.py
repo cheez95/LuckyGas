@@ -13,6 +13,9 @@ from sqlalchemy import and_, or_
 
 from models.database_schema import Client, Delivery, Driver, Vehicle, Route, VehicleType, DeliveryStatus
 from services.prediction_service import GasPredictionService
+from utils.geo_utils import calculate_haversine_distance, validate_coordinates
+from utils.time_utils import parse_client_time_windows, calculate_service_time
+from utils.vehicle_utils import calculate_required_vehicle_type
 
 logger = logging.getLogger(__name__)
 
@@ -106,17 +109,7 @@ class RouteOptimizationService:
         Returns:
             float: 距離（公里）
         """
-        lat1, lon1 = np.radians(point1)
-        lat2, lon2 = np.radians(point2)
-        
-        dlat = lat2 - lat1
-        dlon = lon2 - lon1
-        
-        a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
-        c = 2 * np.arcsin(np.sqrt(a))
-        r = 6371  # 地球半徑（公里）
-        
-        return c * r
+        return calculate_haversine_distance(point1[0], point1[1], point2[0], point2[1])
     
     def estimate_travel_time(self, distance: float, vehicle_type: VehicleType) -> int:
         """
@@ -166,7 +159,7 @@ class RouteOptimizationService:
                 continue
             
             # 解析營業時間
-            time_windows = self._parse_time_windows(client)
+            time_windows = [(tw[0].hour, tw[1].hour) for tw in parse_client_time_windows(client)]
             
             # 建立配送點
             lat, lng = self.geocode_address(client.address)
@@ -186,47 +179,6 @@ class RouteOptimizationService:
             delivery_points.append(point)
         
         return delivery_points
-    
-    def _parse_time_windows(self, client: Client) -> List[Tuple[int, int]]:
-        """解析客戶營業時間"""
-        windows = []
-        
-        # 檢查每個時段
-        time_slots = [
-            (8, 9, client.hour_8_9),
-            (9, 10, client.hour_9_10),
-            (10, 11, client.hour_10_11),
-            (11, 12, client.hour_11_12),
-            (12, 13, client.hour_12_13),
-            (13, 14, client.hour_13_14),
-            (14, 15, client.hour_14_15),
-            (15, 16, client.hour_15_16),
-            (16, 17, client.hour_16_17),
-            (17, 18, client.hour_17_18),
-            (18, 19, client.hour_18_19),
-            (19, 20, client.hour_19_20),
-        ]
-        
-        # 合併連續時段
-        start_hour = None
-        for hour_start, hour_end, is_available in time_slots:
-            if is_available:
-                if start_hour is None:
-                    start_hour = hour_start
-            else:
-                if start_hour is not None:
-                    windows.append((start_hour, hour_start))
-                    start_hour = None
-        
-        # 處理最後一個時段
-        if start_hour is not None:
-            windows.append((start_hour, 20))
-        
-        # 如果沒有指定時段，預設全天
-        if not windows:
-            windows = [(8, 20)]
-        
-        return windows
     
     def _estimate_demand(self, client: Client) -> Dict[str, int]:
         """估算客戶需求量"""

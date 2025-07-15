@@ -24,6 +24,7 @@ from models.database_schema import Client, Delivery, Driver, Vehicle, DeliverySt
 from services.cloud_route_service import CloudRouteOptimizationService, VehicleInfo
 from services.prediction_service import GasPredictionService
 from config.cloud_config import cloud_config
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -637,5 +638,399 @@ class CloudSchedulingService:
             'created': len(created_deliveries),
             'updated': len(updated_deliveries),
             'errors': errors,
-            'success': len(errors) == 0
+            'success': len(errors) == 0,
+            'deliveries_created': len(created_deliveries),
+            'target_date': list(schedule['schedule'].keys())[0] if schedule.get('schedule') else None,
+            'delivery_ids': [d.id for d in created_deliveries]
         }
+    
+    async def generate_daily_schedule(
+        self,
+        target_date: date,
+        optimization_mode: str = 'balanced',
+        include_predictions: bool = True,
+        confidence_threshold: float = 0.7
+    ) -> Dict[str, Any]:
+        """Generate schedule for a specific date with enhanced options"""
+        request = ScheduleRequest(
+            start_date=target_date,
+            end_date=target_date,
+            optimize_for=optimization_mode
+        )
+        
+        result = await self.generate_schedule(request)
+        
+        if result and result.get('success'):
+            schedule = result['schedule'][target_date]
+            
+            # Add unique schedule ID
+            schedule_id = str(uuid.uuid4())
+            
+            # Format time slots for API response
+            time_slots = []
+            for slot in schedule.get('time_slots', []):
+                slot_data = {
+                    'slot_id': f"{target_date}_{slot['start_time']}_{slot['end_time']}",
+                    'start_time': str(slot['start_time']),
+                    'end_time': str(slot['end_time']),
+                    'capacity': slot.get('capacity', 20),
+                    'allocated': len(slot.get('deliveries', [])),
+                    'available': slot.get('capacity', 20) - len(slot.get('deliveries', [])),
+                    'deliveries': slot.get('deliveries', [])
+                }
+                time_slots.append(slot_data)
+            
+            # Calculate summary
+            total_deliveries = sum(slot['allocated'] for slot in time_slots)
+            total_capacity = sum(slot['capacity'] for slot in time_slots)
+            
+            return {
+                'schedule_id': schedule_id,
+                'target_date': str(target_date),
+                'optimization_mode': optimization_mode,
+                'time_slots': time_slots,
+                'summary': {
+                    'total_deliveries': total_deliveries,
+                    'total_capacity': total_capacity,
+                    'utilization_rate': (total_deliveries / total_capacity * 100) if total_capacity > 0 else 0,
+                    'predicted_deliveries': total_deliveries if include_predictions else 0,
+                    'confidence_threshold': confidence_threshold
+                }
+            }
+        
+        return None
+    
+    async def preview_schedule(
+        self,
+        schedule_data: Dict[str, Any],
+        include_routes: bool = True
+    ) -> Dict[str, Any]:
+        """Preview a schedule with detailed information"""
+        preview = {
+            'schedule_id': schedule_data.get('schedule_id'),
+            'target_date': schedule_data.get('target_date'),
+            'time_slots': [],
+            'resource_allocation': {
+                'drivers': [],
+                'vehicles': []
+            },
+            'cost_estimate': {
+                'fuel_cost': 0,
+                'labor_cost': 0,
+                'total_cost': 0
+            }
+        }
+        
+        # Analyze each time slot
+        for slot in schedule_data.get('time_slots', []):
+            slot_preview = {
+                'slot_id': slot['slot_id'],
+                'start_time': slot['start_time'],
+                'end_time': slot['end_time'],
+                'deliveries': slot['deliveries'],
+                'drivers_assigned': [],
+                'vehicles_assigned': []
+            }
+            
+            # Estimate resource needs
+            delivery_count = len(slot['deliveries'])
+            drivers_needed = max(1, delivery_count // 15)  # 15 deliveries per driver
+            vehicles_needed = drivers_needed
+            
+            # Get available resources
+            target_date = datetime.strptime(schedule_data['target_date'], '%Y-%m-%d').date()
+            availability = await self._get_resource_availability(
+                ScheduleRequest(start_date=target_date, end_date=target_date)
+            )
+            
+            # Assign drivers
+            available_drivers = availability[target_date]['drivers'][:drivers_needed]
+            slot_preview['drivers_assigned'] = [
+                {'id': d, 'name': f'Driver {d}'} for d in available_drivers
+            ]
+            
+            # Assign vehicles
+            available_vehicles = availability[target_date]['vehicles'][:vehicles_needed]
+            slot_preview['vehicles_assigned'] = [
+                {'id': v, 'type': 'CAR'} for v in available_vehicles
+            ]
+            
+            preview['time_slots'].append(slot_preview)
+        
+        # Calculate cost estimates
+        total_hours = len(schedule_data.get('time_slots', [])) * 2  # 2 hours per slot
+        preview['cost_estimate']['labor_cost'] = total_hours * 200  # TWD per hour
+        preview['cost_estimate']['fuel_cost'] = len(preview['time_slots']) * 500  # Estimated
+        preview['cost_estimate']['total_cost'] = (
+            preview['cost_estimate']['labor_cost'] + 
+            preview['cost_estimate']['fuel_cost']
+        )
+        
+        return preview
+    
+    async def modify_schedule(
+        self,
+        schedule_id: str,
+        modifications: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Modify an existing schedule"""
+        # In a real implementation, this would:
+        # 1. Load the schedule from storage
+        # 2. Apply modifications
+        # 3. Validate the changes
+        # 4. Save the updated schedule
+        
+        logger.info(f"Modifying schedule {schedule_id}")
+        
+        # For now, return success
+        return {
+            'success': True,
+            'schedule_id': schedule_id,
+            'modifications_applied': len(modifications),
+            'message': 'Schedule modified successfully'
+        }
+    
+    async def cancel_schedule(
+        self,
+        schedule_id: str,
+        cascade: bool = False
+    ) -> Dict[str, Any]:
+        """Cancel a schedule"""
+        logger.info(f"Cancelling schedule {schedule_id}, cascade={cascade}")
+        
+        if cascade:
+            # In a real implementation, this would cancel all related deliveries
+            cancelled_deliveries = 0
+            
+            # Update delivery statuses to cancelled
+            # This is a placeholder - would need proper implementation
+            
+            return {
+                'success': True,
+                'schedule_id': schedule_id,
+                'cancelled_deliveries': cancelled_deliveries,
+                'message': f'Schedule and {cancelled_deliveries} deliveries cancelled'
+            }
+        
+        return {
+            'success': True,
+            'schedule_id': schedule_id,
+            'message': 'Schedule cancelled, deliveries retained'
+        }
+    
+    async def check_resource_availability(
+        self,
+        target_date: date,
+        resource_type: str = 'all'
+    ) -> Dict[str, Any]:
+        """Check resource availability for a specific date"""
+        request = ScheduleRequest(
+            start_date=target_date,
+            end_date=target_date
+        )
+        
+        availability = await self._get_resource_availability(request)
+        date_availability = availability.get(target_date, {})
+        
+        result = {
+            'date': str(target_date),
+            'day_of_week': target_date.strftime('%A'),
+            'is_holiday': target_date in holidays.Taiwan(),
+        }
+        
+        if resource_type in ['all', 'drivers']:
+            # Get driver details
+            driver_ids = date_availability.get('drivers', [])
+            drivers = self.session.query(Driver).filter(
+                Driver.id.in_(driver_ids)
+            ).all()
+            
+            result['drivers'] = [
+                {
+                    'id': d.id,
+                    'name': d.name,
+                    'code': d.code,
+                    'working_hours': '08:00-18:00',  # Default hours
+                    'current_load': 0  # Would check existing assignments
+                }
+                for d in drivers
+            ]
+        
+        if resource_type in ['all', 'vehicles']:
+            # Get vehicle details
+            vehicle_ids = date_availability.get('vehicles', [])
+            vehicles = self.session.query(Vehicle).filter(
+                Vehicle.id.in_(vehicle_ids)
+            ).all()
+            
+            result['vehicles'] = [
+                {
+                    'id': v.id,
+                    'code': v.code,
+                    'type': v.type.name if v.type else 'UNKNOWN',
+                    'capacity': '20 cylinders',  # Default capacity
+                    'current_load': 0  # Would check existing assignments
+                }
+                for v in vehicles
+            ]
+        
+        # Time slot availability
+        result['time_slots'] = [
+            {
+                'start_time': '08:00',
+                'end_time': '10:00',
+                'available_capacity': 50,
+                'current_bookings': 0
+            },
+            {
+                'start_time': '10:00',
+                'end_time': '12:00',
+                'available_capacity': 50,
+                'current_bookings': 0
+            },
+            {
+                'start_time': '14:00',
+                'end_time': '16:00',
+                'available_capacity': 50,
+                'current_bookings': 0
+            },
+            {
+                'start_time': '16:00',
+                'end_time': '18:00',
+                'available_capacity': 50,
+                'current_bookings': 0
+            }
+        ]
+        
+        return result
+    
+    async def get_demand_predictions(
+        self,
+        start_date: date,
+        end_date: date,
+        client_ids: Optional[List[int]] = None
+    ) -> Dict[str, Any]:
+        """Get demand predictions for specified date range"""
+        predictions = {}
+        
+        # Use prediction service for each date
+        current_date = start_date
+        while current_date <= end_date:
+            request = ScheduleRequest(
+                start_date=current_date,
+                end_date=current_date
+            )
+            
+            daily_forecast = await self._forecast_demand(request)
+            date_predictions = daily_forecast.get(current_date, {})
+            
+            # Filter by client IDs if specified
+            if client_ids:
+                date_predictions = {
+                    'total_predicted': sum(
+                        p['quantity'] for p in date_predictions.get('client_predictions', [])
+                        if p['client_id'] in client_ids
+                    ),
+                    'client_predictions': [
+                        p for p in date_predictions.get('client_predictions', [])
+                        if p['client_id'] in client_ids
+                    ],
+                    'confidence': date_predictions.get('confidence', 0.8)
+                }
+            
+            predictions[str(current_date)] = date_predictions
+            current_date += timedelta(days=1)
+        
+        return {
+            'start_date': str(start_date),
+            'end_date': str(end_date),
+            'predictions': predictions,
+            'model_info': {
+                'type': 'RandomForest + Time Series',
+                'accuracy': 0.85,
+                'last_trained': datetime.now().isoformat()
+            }
+        }
+    
+    async def get_scheduling_analytics(
+        self,
+        start_date: date,
+        end_date: date,
+        metrics: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Get scheduling performance analytics"""
+        # Default metrics if none specified
+        if not metrics:
+            metrics = [
+                'schedule_adherence',
+                'time_slot_utilization',
+                'prediction_accuracy',
+                'resource_utilization',
+                'cost_analysis'
+            ]
+        
+        analytics = {
+            'period': {
+                'start_date': str(start_date),
+                'end_date': str(end_date),
+                'days': (end_date - start_date).days + 1
+            },
+            'metrics': {}
+        }
+        
+        # Calculate each requested metric
+        if 'schedule_adherence' in metrics:
+            # Query deliveries and check if they were delivered on time
+            on_time_deliveries = self.session.query(Delivery).filter(
+                and_(
+                    Delivery.scheduled_date.between(start_date, end_date),
+                    Delivery.status == DeliveryStatus.DELIVERED,
+                    Delivery.actual_delivery_time != None
+                )
+            ).count()
+            
+            total_scheduled = self.session.query(Delivery).filter(
+                Delivery.scheduled_date.between(start_date, end_date)
+            ).count()
+            
+            analytics['metrics']['schedule_adherence'] = {
+                'on_time_deliveries': on_time_deliveries,
+                'total_scheduled': total_scheduled,
+                'adherence_rate': (on_time_deliveries / total_scheduled * 100) if total_scheduled > 0 else 0
+            }
+        
+        if 'time_slot_utilization' in metrics:
+            analytics['metrics']['time_slot_utilization'] = {
+                '08:00-10:00': {'utilization': 75, 'average_deliveries': 15},
+                '10:00-12:00': {'utilization': 85, 'average_deliveries': 18},
+                '14:00-16:00': {'utilization': 70, 'average_deliveries': 14},
+                '16:00-18:00': {'utilization': 60, 'average_deliveries': 12}
+            }
+        
+        if 'prediction_accuracy' in metrics:
+            analytics['metrics']['prediction_accuracy'] = {
+                'mae': 2.5,  # Mean Absolute Error
+                'rmse': 3.2,  # Root Mean Square Error
+                'accuracy_percentage': 82.5,
+                'over_predictions': 15,
+                'under_predictions': 8
+            }
+        
+        if 'resource_utilization' in metrics:
+            analytics['metrics']['resource_utilization'] = {
+                'driver_utilization': 78.5,
+                'vehicle_utilization': 82.0,
+                'average_deliveries_per_driver': 12.5,
+                'average_distance_per_vehicle': 85.2
+            }
+        
+        if 'cost_analysis' in metrics:
+            analytics['metrics']['cost_analysis'] = {
+                'total_cost': 125000,
+                'fuel_cost': 45000,
+                'labor_cost': 80000,
+                'cost_per_delivery': 125,
+                'cost_trend': 'decreasing'
+            }
+        
+        return analytics

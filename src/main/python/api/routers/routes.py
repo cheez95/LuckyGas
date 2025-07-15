@@ -10,7 +10,8 @@ import json
 
 from core.database import get_db
 from models.database_schema import Route, Driver, Vehicle, Delivery, Client, DeliveryStatus
-from services.route_optimization_service import RouteOptimizationService
+from domain.services.route_optimizer import RouteOptimizationService
+import services.routing  # Import to register optimizers
 from services.driver_service import DriverService
 from services.vehicle_service import VehicleService
 from api.schemas.route import (
@@ -89,7 +90,15 @@ async def plan_routes(
         start_time = time.time()
         
         # Initialize services
-        route_service = RouteOptimizationService(db)
+        # Configure route optimization service
+        config = {
+            'default_optimizer': 'cloud' if request.use_advanced_optimization else 'simple',
+            'constraints': {
+                'max_route_distance': request.max_route_distance_km or 200,
+                'max_deliveries_per_route': request.max_deliveries_per_route or 20
+            }
+        }
+        route_service = RouteOptimizationService(db, config)
         driver_service = DriverService(db)
         vehicle_service = VehicleService(db)
         
@@ -122,12 +131,76 @@ async def plan_routes(
         if not drivers:
             raise HTTPException(status_code=400, detail="沒有可用的司機")
         
-        # Generate optimized routes
-        routes = route_service.optimize_routes(
-            delivery_date=request.delivery_date,
-            available_vehicles=vehicles,
-            available_drivers=drivers
+        # Get deliveries for the date
+        deliveries = db.query(Delivery).filter(
+            Delivery.scheduled_date == request.delivery_date,
+            Delivery.status.in_([DeliveryStatus.PENDING, DeliveryStatus.SCHEDULED])
+        ).all()
+        
+        # Convert to format expected by optimizer
+        delivery_data = []
+        for delivery in deliveries:
+            if delivery.client:
+                delivery_data.append({
+                    'id': delivery.id,
+                    'client_id': delivery.client_id,
+                    'cylinder_type': delivery.cylinder_type or '20kg',
+                    'quantity': delivery.quantity or 1,
+                    'priority': getattr(delivery.client, 'priority', 1.0),
+                    'address': delivery.client.address
+                })
+        
+        # Optimize routes using unified service
+        optimization_result = await route_service.optimize_routes(
+            date=request.delivery_date,
+            deliveries=delivery_data,
+            optimization_mode=request.optimization_objective or 'balanced'
         )
+        
+        if not optimization_result.success:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Route optimization failed: {', '.join(optimization_result.errors)}"
+            )
+        
+        # Convert optimizer results to database routes
+        routes = []
+        for opt_route in optimization_result.routes:
+            # Create route in database
+            route = Route(
+                driver_id=opt_route['driver']['id'],
+                vehicle_id=opt_route['vehicle']['id'],
+                route_date=request.delivery_date,
+                status='optimized',
+                total_clients=len(opt_route['deliveries']),
+                total_distance_km=opt_route.get('total_distance', 0),
+                estimated_duration_minutes=opt_route.get('estimated_duration', 0),
+                is_optimized=True,
+                optimization_score=0.8,
+                route_details=json.dumps({
+                    'points': opt_route['deliveries'],
+                    'optimization_method': optimization_result.metrics.get('optimization_method', 'simple')
+                }),
+                created_at=datetime.now()
+            )
+            db.add(route)
+            db.flush()
+            
+            # Update delivery assignments
+            for delivery_info in opt_route['deliveries']:
+                delivery = next(
+                    (d for d in deliveries if d.client_id == delivery_info['client_id']),
+                    None
+                )
+                if delivery:
+                    delivery.route_id = route.id
+                    delivery.status = DeliveryStatus.ASSIGNED
+                    delivery.driver_id = route.driver_id
+                    delivery.vehicle_id = route.vehicle_id
+            
+            routes.append(route)
+        
+        db.commit()
         
         # Calculate optimization metrics
         optimization_time = time.time() - start_time
@@ -159,27 +232,29 @@ async def plan_routes(
             )
             route_responses.append(route_response)
         
-        # Get unassigned clients (those with pending deliveries but not in any route)
-        delivery_points = route_service.get_delivery_points_for_date(request.delivery_date)
-        assigned_client_ids = set()
-        for route in routes:
-            if route.route_details:
-                details = json.loads(route.route_details)
-                for point in details.get('points', []):
-                    assigned_client_ids.add(point['client_id'])
-        
+        # Get unassigned deliveries
         unassigned = []
-        for point in delivery_points:
-            if point.client_id not in assigned_client_ids:
-                client = db.query(Client).filter(Client.id == point.client_id).first()
-                if client:
-                    unassigned.append({
-                        'client_id': client.id,
-                        'client_code': client.client_code,
-                        'name': client.short_name or client.invoice_title,
-                        'address': client.address,
-                        'priority': point.priority
-                    })
+        if optimization_result.metrics.get('unassigned_deliveries', 0) > 0:
+            # Find which deliveries were not assigned
+            assigned_client_ids = set()
+            for route in routes:
+                if route.route_details:
+                    details = json.loads(route.route_details)
+                    for point in details.get('points', []):
+                        assigned_client_ids.add(point['client_id'])
+            
+            # Get unassigned deliveries
+            for delivery in deliveries:
+                if delivery.client_id not in assigned_client_ids:
+                    client = delivery.client
+                    if client:
+                        unassigned.append({
+                            'client_id': client.id,
+                            'client_code': client.client_code,
+                            'name': client.short_name or client.invoice_title,
+                            'address': client.address,
+                            'priority': getattr(client, 'priority', 1.0)
+                        })
         
         result = RouteOptimizationResult(
             success=True,
