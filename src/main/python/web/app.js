@@ -3156,9 +3156,34 @@ async function showRouteMap(routeId) {
         const mapData = await response.json();
         
         // For now, just show the data
-        // TODO: Integrate with actual map library
-        console.log('Route map data:', mapData);
-        showNotification('地圖功能開發中', 'info');
+        // Display map data in a modal
+        const modalContent = `
+            <h2 class="text-xl font-bold mb-4">路線地圖</h2>
+            <div class="mb-4">
+                <p class="text-sm text-gray-600">路線ID: ${mapData.route_id}</p>
+                <p class="text-sm text-gray-600">中心座標: ${mapData.center_lat.toFixed(6)}, ${mapData.center_lng.toFixed(6)}</p>
+            </div>
+            <div class="bg-gray-100 rounded p-4 mb-4">
+                <h3 class="font-semibold mb-2">路線點:</h3>
+                <div class="space-y-2 max-h-64 overflow-y-auto">
+                    ${mapData.markers.map((marker, index) => `
+                        <div class="bg-white rounded p-2">
+                            <p class="font-medium">${index + 1}. ${marker.title || marker.label}</p>
+                            <p class="text-sm text-gray-600">${marker.address || ''}</p>
+                            <p class="text-xs text-gray-500">座標: ${marker.lat.toFixed(6)}, ${marker.lng.toFixed(6)}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            <div class="flex justify-end">
+                <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
+                    關閉
+                </button>
+            </div>
+        `;
+        
+        const modal = createModal(modalContent);
+        document.body.appendChild(modal);
         
     } catch (error) {
         console.error('Error showing route map:', error);
@@ -3168,8 +3193,129 @@ async function showRouteMap(routeId) {
 
 // Edit route
 async function editRoute(routeId) {
-    // TODO: Implement route editing
-    showNotification('編輯功能開發中', 'info');
+    try {
+        // Fetch route details
+        const response = await fetch(`${API_BASE}/routes/${routeId}`);
+        if (!response.ok) throw new Error('Failed to fetch route');
+        
+        const route = await response.json();
+        
+        // Create edit modal
+        const modalContent = `
+            <h2 class="text-xl font-bold mb-4">編輯路線</h2>
+            <form id="edit-route-form">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">路線名稱</label>
+                        <input type="text" name="route_name" value="${route.route_name}" required class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">路線日期</label>
+                        <input type="date" value="${route.route_date}" disabled class="w-full px-3 py-2 border rounded bg-gray-100">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">區域</label>
+                        <input type="text" value="${route.area}" disabled class="w-full px-3 py-2 border rounded bg-gray-100">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">司機</label>
+                        <select name="driver_id" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                            ${allDrivers.map(driver => `
+                                <option value="${driver.id}" ${driver.id === route.driver_id ? 'selected' : ''}>
+                                    ${driver.name}
+                                </option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">車輛</label>
+                        <select name="vehicle_id" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                            ${allVehicles.map(vehicle => `
+                                <option value="${vehicle.id}" ${vehicle.id === route.vehicle_id ? 'selected' : ''}>
+                                    ${vehicle.plate_number} - ${vehicle.vehicle_type}
+                                </option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">優化狀態</label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="is_optimized" ${route.is_optimized ? 'checked' : ''} class="mr-2">
+                            <span>已優化</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="mt-6">
+                    <h3 class="font-semibold mb-2">路線點 (${route.route_points?.length || 0} 個客戶)</h3>
+                    <div class="bg-gray-50 rounded p-3 max-h-48 overflow-y-auto">
+                        ${route.route_points?.map((point, index) => `
+                            <div class="flex justify-between items-center py-2 border-b">
+                                <span class="text-sm">${index + 1}. ${point.client_name} - ${point.address}</span>
+                                <span class="text-xs text-gray-500">預計到達: ${new Date(point.estimated_arrival).toLocaleTimeString('zh-TW', {hour: '2-digit', minute: '2-digit'})}</span>
+                            </div>
+                        `).join('') || '<p class="text-gray-500">無路線點</p>'}
+                    </div>
+                </div>
+                
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 border rounded hover:bg-gray-100">
+                        取消
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                        儲存變更
+                    </button>
+                </div>
+            </form>
+        `;
+        
+        const modal = createModal(modalContent);
+        document.body.appendChild(modal);
+        
+        // Load drivers and vehicles if not already loaded
+        if (allDrivers.length === 0) await loadDrivers();
+        if (allVehicles.length === 0) await loadVehicles();
+        
+        // Handle form submission
+        const form = modal.querySelector('#edit-route-form');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            const updateData = {
+                route_name: formData.get('route_name'),
+                driver_id: parseInt(formData.get('driver_id')),
+                vehicle_id: parseInt(formData.get('vehicle_id')),
+                is_optimized: formData.get('is_optimized') === 'on'
+            };
+            
+            try {
+                const updateResponse = await fetch(`${API_BASE}/routes/${routeId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updateData)
+                });
+                
+                if (!updateResponse.ok) throw new Error('Update failed');
+                
+                showNotification('路線已更新', 'success');
+                closeModal(modal);
+                await loadRoutes(currentRoutePage);
+                
+            } catch (error) {
+                showNotification('更新失敗: ' + error.message, 'error');
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error editing route:', error);
+        showNotification('載入路線失敗', 'error');
+    }
 }
 
 // Delete route
@@ -3412,3 +3558,16 @@ function createModal(content) {
     `;
     return modal;
 }
+
+// Make functions available globally for onclick handlers
+window.closeModal = closeModal;
+window.showRoutePlanModal = showRoutePlanModal;
+window.showAddRouteModal = showAddRouteModal;
+window.viewRoute = viewRoute;
+window.showRouteMap = showRouteMap;
+window.editRoute = editRoute;
+window.deleteRoute = deleteRoute;
+window.filterRoutes = filterRoutes;
+window.loadRoutes = loadRoutes;
+window.addClientToRoute = addClientToRoute;
+window.removeClientFromRoute = removeClientFromRoute;
