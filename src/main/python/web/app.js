@@ -41,6 +41,12 @@ let routeFilters = {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    // Set current date in header
+    const dateElement = document.getElementById('currentDate');
+    if (dateElement) {
+        dateElement.textContent = new Date().toLocaleDateString('zh-TW');
+    }
+    
     setupNavigation();
     setupDateDefaults();
     loadDashboard();
@@ -256,7 +262,7 @@ function loadStatusChartFromStats(todayDeliveries) {
     const cancelled = todayDeliveries?.cancelled || 0;
 
     // Destroy existing chart if it exists
-    if (window.statusChart) {
+    if (window.statusChart && typeof window.statusChart.destroy === 'function') {
         window.statusChart.destroy();
     }
 
