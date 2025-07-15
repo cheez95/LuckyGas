@@ -72,6 +72,9 @@
                     <a href="#deliveries" class="nav-link hover:text-blue-200 transition">
                         <i class="fas fa-shipping-fast mr-1"></i>配送管理
                     </a>
+                    <a href="#routes" class="nav-link hover:text-blue-200 transition">
+                        <i class="fas fa-route mr-1"></i>路線規劃
+                    </a>
                 </div>
                 <div class="flex items-center space-x-4">
                     <span class="text-sm">${new Date().toLocaleDateString('zh-TW')}</span>
@@ -410,6 +413,109 @@
                     顯示 <span id="deliveries-showing">0</span> 筆資料，共 <span id="deliveries-total">0</span> 筆
                 </div>
                 <div class="flex gap-2" id="deliveries-pagination">
+                    <!-- Pagination buttons will be inserted here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Routes Section -->
+        <section id="routes" class="mb-8 hidden">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold">路線規劃</h2>
+                <div class="flex gap-2">
+                    <button onclick="showRoutePlanModal()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+                        <i class="fas fa-magic mr-2"></i>自動規劃
+                    </button>
+                    <button onclick="showAddRouteModal()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">
+                        <i class="fas fa-plus mr-2"></i>手動建立
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Route Filters -->
+            <div class="bg-white rounded-lg shadow p-4 mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">開始日期</label>
+                        <input type="date" id="route-date-from" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">結束日期</label>
+                        <input type="date" id="route-date-to" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">區域</label>
+                        <select id="route-area" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                            <option value="">所有區域</option>
+                            <option value="A-瑞光">A-瑞光</option>
+                            <option value="B-四維">B-四維</option>
+                            <option value="C-復國">C-復國</option>
+                            <option value="D-泰東">D-泰東</option>
+                            <option value="E-寶桑">E-寶桑</option>
+                            <option value="F-成功線">F-成功線</option>
+                            <option value="G-南迴線">G-南迴線</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">司機</label>
+                        <select id="route-driver" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                            <option value="">所有司機</option>
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="filterRoutes()" class="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+                            <i class="fas fa-filter mr-2"></i>篩選
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Routes Table -->
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                日期
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                路線名稱
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                區域
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                司機
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                車輛
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                客戶數
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                總距離
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                狀態
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                操作
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="routes-tbody" class="bg-white divide-y divide-gray-200">
+                        <!-- Routes will be dynamically inserted here -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            <div class="flex justify-between items-center mt-4">
+                <div class="text-sm text-gray-600">
+                    顯示 <span id="routes-showing">0</span> 筆資料，共 <span id="routes-total">0</span> 筆
+                </div>
+                <div class="flex gap-2" id="routes-pagination">
                     <!-- Pagination buttons will be inserted here -->
                 </div>
             </div>
@@ -1093,5 +1199,195 @@
             }
         }
     </script>
+    
+    <!-- Route Planning Modal -->
+    <div id="routePlanModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <h3 class="text-xl font-bold mb-4">自動路線規劃</h3>
+            <form id="route-plan-form">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">配送日期 *</label>
+                        <input type="date" name="delivery_date" required class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">區域（選填）</label>
+                        <select name="area" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                            <option value="">不限區域</option>
+                            <option value="A-瑞光">A-瑞光</option>
+                            <option value="B-四維">B-四維</option>
+                            <option value="C-復國">C-復國</option>
+                            <option value="D-泰東">D-泰東</option>
+                            <option value="E-寶桑">E-寶桑</option>
+                            <option value="F-成功線">F-成功線</option>
+                            <option value="G-南迴線">G-南迴線</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">優化目標</label>
+                        <select name="optimize_by" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                            <option value="distance">最短距離</option>
+                            <option value="time">最短時間</option>
+                            <option value="balanced">平衡模式</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">開始時間</label>
+                        <input type="time" name="start_time" value="08:00" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">結束時間</label>
+                        <input type="time" name="end_time" value="18:00" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">最大行駛距離 (km)</label>
+                        <input type="number" name="max_distance_km" min="0" step="0.1" placeholder="不限" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">最大工作時間 (分鐘)</label>
+                        <input type="number" name="max_duration_minutes" min="0" placeholder="不限" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">可用司機</label>
+                        <div class="border rounded p-2 max-h-32 overflow-y-auto" id="route-plan-drivers">
+                            <!-- Driver checkboxes will be inserted here -->
+                        </div>
+                    </div>
+                    
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">可用車輛</label>
+                        <div class="border rounded p-2 max-h-32 overflow-y-auto" id="route-plan-vehicles">
+                            <!-- Vehicle checkboxes will be inserted here -->
+                        </div>
+                    </div>
+                    
+                    <div class="col-span-2">
+                        <label class="flex items-center">
+                            <input type="checkbox" name="use_traffic" class="mr-2">
+                            <span class="text-sm">考慮即時路況</span>
+                        </label>
+                    </div>
+                    
+                    <div class="col-span-2">
+                        <label class="flex items-center">
+                            <input type="checkbox" name="include_break_time" checked class="mr-2">
+                            <span class="text-sm">包含休息時間</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" onclick="closeModal('routePlanModal')" class="px-4 py-2 border rounded hover:bg-gray-100 transition">
+                        取消
+                    </button>
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+                        開始規劃
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Route Details Modal -->
+    <div id="routeDetailsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">路線詳情</h3>
+                <button onclick="closeModal('routeDetailsModal')" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="route-details-content">
+                <!-- Route details will be inserted here -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Manual Route Creation Modal -->
+    <div id="addRouteModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <h3 class="text-xl font-bold mb-4">手動建立路線</h3>
+            <form id="add-route-form">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">路線日期 *</label>
+                        <input type="date" name="route_date" required class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">路線名稱 *</label>
+                        <input type="text" name="route_name" required class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500" placeholder="例：A區-上午路線">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">區域 *</label>
+                        <select name="area" required class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                            <option value="">請選擇區域</option>
+                            <option value="A-瑞光">A-瑞光</option>
+                            <option value="B-四維">B-四維</option>
+                            <option value="C-復國">C-復國</option>
+                            <option value="D-泰東">D-泰東</option>
+                            <option value="E-寶桑">E-寶桑</option>
+                            <option value="F-成功線">F-成功線</option>
+                            <option value="G-南迴線">G-南迴線</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">司機 *</label>
+                        <select name="driver_id" required class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                            <option value="">請選擇司機</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">車輛 *</label>
+                        <select name="vehicle_id" required class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                            <option value="">請選擇車輛</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mt-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">選擇客戶 *</label>
+                    <div class="border rounded p-4">
+                        <input type="text" placeholder="搜尋客戶..." class="w-full px-3 py-2 border rounded mb-4" id="route-client-search">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <h4 class="font-medium mb-2">可選客戶</h4>
+                                <div class="border rounded p-2 h-64 overflow-y-auto" id="available-clients">
+                                    <!-- Available clients will be listed here -->
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="font-medium mb-2">已選客戶 (<span id="selected-clients-count">0</span>)</h4>
+                                <div class="border rounded p-2 h-64 overflow-y-auto" id="selected-clients">
+                                    <!-- Selected clients will be listed here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" onclick="closeModal('addRouteModal')" class="px-4 py-2 border rounded hover:bg-gray-100 transition">
+                        取消
+                    </button>
+                    <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">
+                        建立路線
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
 </body>
 </html>

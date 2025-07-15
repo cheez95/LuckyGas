@@ -5,10 +5,13 @@ const API_BASE = 'http://localhost:8000/api';
 let currentPage = 'dashboard';
 let currentClientPage = 1;
 let currentDeliveryPage = 1;
+let currentRoutePage = 1;
 let allClients = [];
 let allDrivers = [];
 let allVehicles = [];
 let allDeliveries = [];
+let allRoutes = [];
+let selectedRouteClients = [];
 
 // Filters and sorting
 let clientFilters = {
@@ -27,6 +30,13 @@ let deliveryFilters = {
     clientId: '',
     sortBy: 'scheduled_date',
     sortOrder: 'desc'
+};
+
+let routeFilters = {
+    dateFrom: '',
+    dateTo: '',
+    area: '',
+    driverId: ''
 };
 
 // Initialize
@@ -128,6 +138,9 @@ function showSection(section) {
                 break;
             case 'deliveries':
                 loadDeliveries();
+                break;
+            case 'routes':
+                loadRoutes();
                 break;
         }
     } else {
@@ -2633,4 +2646,769 @@ function viewDelivery(deliveryId) {
 
 function assignDelivery(deliveryId) {
     return assignDriver(deliveryId);
+}
+
+// ========== Route Management Functions ==========
+
+// Initialize route date filters
+function setupRouteDateDefaults() {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const lastWeek = new Date(today);
+    lastWeek.setDate(lastWeek.getDate() - 7);
+    
+    const fromDate = lastWeek.toISOString().split('T')[0];
+    const toDate = tomorrow.toISOString().split('T')[0];
+    
+    const fromInput = document.getElementById('route-date-from');
+    const toInput = document.getElementById('route-date-to');
+    
+    if (fromInput) {
+        fromInput.value = fromDate;
+        routeFilters.dateFrom = fromDate;
+    }
+    
+    if (toInput) {
+        toInput.value = toDate;
+        routeFilters.dateTo = toDate;
+    }
+}
+
+// Load routes
+async function loadRoutes(page = 1) {
+    try {
+        // Setup date defaults if not set
+        if (!routeFilters.dateFrom || !routeFilters.dateTo) {
+            setupRouteDateDefaults();
+        }
+        
+        // Build query parameters
+        const params = new URLSearchParams({
+            skip: (page - 1) * 10,
+            limit: 10
+        });
+        
+        if (routeFilters.dateFrom) params.append('start_date', routeFilters.dateFrom);
+        if (routeFilters.dateTo) params.append('end_date', routeFilters.dateTo);
+        if (routeFilters.area) params.append('area', routeFilters.area);
+        if (routeFilters.driverId) params.append('driver_id', routeFilters.driverId);
+        
+        const response = await fetch(`${API_BASE}/routes?${params}`);
+        if (!response.ok) throw new Error('Failed to fetch routes');
+        
+        const data = await response.json();
+        allRoutes = data.items || [];
+        currentRoutePage = page;
+        
+        // Load drivers for filter
+        await loadDriversForFilter('route-driver');
+        
+        displayRoutes(allRoutes);
+        updateRoutePagination(data.total, data.page, data.page_size);
+        
+    } catch (error) {
+        console.error('Error loading routes:', error);
+        showNotification('載入路線失敗', 'error');
+    }
+}
+
+// Display routes in table
+function displayRoutes(routes) {
+    const tbody = document.getElementById('routes-tbody');
+    if (!tbody) return;
+    
+    if (routes.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="px-6 py-4 text-center text-gray-500">
+                    沒有找到路線資料
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = routes.map(route => `
+        <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                ${formatDate(route.route_date)}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm font-medium text-gray-900">${route.route_name}</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                ${route.area}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                ${route.driver_name || '-'}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                ${route.vehicle_plate || '-'}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
+                ${route.total_clients}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
+                ${route.total_distance_km.toFixed(1)} km
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                ${route.is_optimized ? 
+                    '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">已優化</span>' :
+                    '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">手動</span>'
+                }
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <button onclick="viewRoute(${route.id})" class="text-blue-600 hover:text-blue-900 mr-2" title="檢視">
+                    <i class="fas fa-eye"></i>
+                </button>
+                <button onclick="showRouteMap(${route.id})" class="text-green-600 hover:text-green-900 mr-2" title="地圖">
+                    <i class="fas fa-map-marked-alt"></i>
+                </button>
+                <button onclick="editRoute(${route.id})" class="text-yellow-600 hover:text-yellow-900 mr-2" title="編輯">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button onclick="deleteRoute(${route.id})" class="text-red-600 hover:text-red-900" title="刪除">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+    
+    // Update showing count
+    const showingElement = document.getElementById('routes-showing');
+    if (showingElement) {
+        showingElement.textContent = routes.length;
+    }
+}
+
+// Update route pagination
+function updateRoutePagination(total, currentPage, pageSize) {
+    const totalElement = document.getElementById('routes-total');
+    if (totalElement) {
+        totalElement.textContent = total;
+    }
+    
+    const totalPages = Math.ceil(total / pageSize);
+    const paginationContainer = document.getElementById('routes-pagination');
+    if (!paginationContainer) return;
+    
+    let paginationHTML = '';
+    
+    // Previous button
+    if (currentPage > 1) {
+        paginationHTML += `
+            <button onclick="loadRoutes(${currentPage - 1})" class="px-3 py-1 border rounded hover:bg-gray-100">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+        `;
+    }
+    
+    // Page numbers
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === currentPage) {
+            paginationHTML += `
+                <button class="px-3 py-1 border rounded bg-blue-600 text-white">${i}</button>
+            `;
+        } else if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+            paginationHTML += `
+                <button onclick="loadRoutes(${i})" class="px-3 py-1 border rounded hover:bg-gray-100">${i}</button>
+            `;
+        } else if (i === currentPage - 3 || i === currentPage + 3) {
+            paginationHTML += `<span class="px-2">...</span>`;
+        }
+    }
+    
+    // Next button
+    if (currentPage < totalPages) {
+        paginationHTML += `
+            <button onclick="loadRoutes(${currentPage + 1})" class="px-3 py-1 border rounded hover:bg-gray-100">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+        `;
+    }
+    
+    paginationContainer.innerHTML = paginationHTML;
+}
+
+// Filter routes
+async function filterRoutes() {
+    // Get filter values
+    routeFilters.dateFrom = document.getElementById('route-date-from').value;
+    routeFilters.dateTo = document.getElementById('route-date-to').value;
+    routeFilters.area = document.getElementById('route-area').value;
+    routeFilters.driverId = document.getElementById('route-driver').value;
+    
+    // Reload routes with filters
+    await loadRoutes(1);
+}
+
+// Show route planning modal
+async function showRoutePlanModal() {
+    const modal = document.getElementById('routePlanModal');
+    if (!modal) return;
+    
+    // Set default date to tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    modal.querySelector('input[name="delivery_date"]').value = tomorrow.toISOString().split('T')[0];
+    
+    // Load available drivers and vehicles
+    await loadAvailableDriversAndVehicles();
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+// Load available drivers and vehicles for route planning
+async function loadAvailableDriversAndVehicles() {
+    try {
+        // Load drivers
+        const driversResponse = await fetch(`${API_BASE}/drivers?is_available=true`);
+        const driversData = await driversResponse.json();
+        const drivers = driversData.items || [];
+        
+        const driversContainer = document.getElementById('route-plan-drivers');
+        if (driversContainer) {
+            driversContainer.innerHTML = drivers.map(driver => `
+                <label class="flex items-center mb-2">
+                    <input type="checkbox" name="driver_ids" value="${driver.id}" class="mr-2">
+                    <span>${driver.name}</span>
+                </label>
+            `).join('') || '<p class="text-gray-500">沒有可用的司機</p>';
+        }
+        
+        // Load vehicles
+        const vehiclesResponse = await fetch(`${API_BASE}/vehicles?is_available=true`);
+        const vehiclesData = await vehiclesResponse.json();
+        const vehicles = vehiclesData.items || [];
+        
+        const vehiclesContainer = document.getElementById('route-plan-vehicles');
+        if (vehiclesContainer) {
+            vehiclesContainer.innerHTML = vehicles.map(vehicle => `
+                <label class="flex items-center mb-2">
+                    <input type="checkbox" name="vehicle_ids" value="${vehicle.id}" class="mr-2">
+                    <span>${vehicle.plate_number} - ${vehicle.vehicle_type}</span>
+                </label>
+            `).join('') || '<p class="text-gray-500">沒有可用的車輛</p>';
+        }
+        
+    } catch (error) {
+        console.error('Error loading drivers and vehicles:', error);
+        showNotification('載入資源失敗', 'error');
+    }
+}
+
+// Handle route planning form submission
+document.getElementById('route-plan-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const form = e.target;
+    const formData = new FormData(form);
+    
+    // Get selected driver and vehicle IDs
+    const driverIds = Array.from(form.querySelectorAll('input[name="driver_ids"]:checked'))
+        .map(input => parseInt(input.value));
+    const vehicleIds = Array.from(form.querySelectorAll('input[name="vehicle_ids"]:checked'))
+        .map(input => parseInt(input.value));
+    
+    // Build request data
+    const requestData = {
+        delivery_date: formData.get('delivery_date'),
+        area: formData.get('area') || null,
+        driver_ids: driverIds.length > 0 ? driverIds : null,
+        vehicle_ids: vehicleIds.length > 0 ? vehicleIds : null,
+        optimize_by: formData.get('optimize_by'),
+        start_time: formData.get('start_time'),
+        end_time: formData.get('end_time'),
+        use_traffic: formData.get('use_traffic') === 'on',
+        include_break_time: formData.get('include_break_time') === 'on'
+    };
+    
+    // Add optional parameters if provided
+    if (formData.get('max_distance_km')) {
+        requestData.max_distance_km = parseFloat(formData.get('max_distance_km'));
+    }
+    if (formData.get('max_duration_minutes')) {
+        requestData.max_duration_minutes = parseInt(formData.get('max_duration_minutes'));
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/routes/plan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestData)
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Route planning failed');
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification(result.message, 'success');
+            closeModal('routePlanModal');
+            
+            // Show optimization results
+            showOptimizationResults(result);
+            
+            // Reload routes
+            await loadRoutes(1);
+        } else {
+            throw new Error(result.message);
+        }
+        
+    } catch (error) {
+        console.error('Route planning error:', error);
+        showNotification(error.message || '路線規劃失敗', 'error');
+    }
+});
+
+// Show optimization results
+function showOptimizationResults(result) {
+    let modalContent = `
+        <h2 class="text-xl font-bold mb-4">路線規劃結果</h2>
+        <div class="mb-4">
+            <p class="text-green-600 font-medium">${result.message}</p>
+            <p class="text-sm text-gray-600 mt-2">優化耗時: ${result.optimization_time_seconds?.toFixed(2) || 0} 秒</p>
+        </div>
+    `;
+    
+    if (result.routes && result.routes.length > 0) {
+        modalContent += `
+            <h3 class="font-semibold mb-2">生成的路線:</h3>
+            <div class="space-y-2 max-h-64 overflow-y-auto">
+                ${result.routes.map(route => `
+                    <div class="border rounded p-3">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="font-medium">${route.route_name}</p>
+                                <p class="text-sm text-gray-600">
+                                    司機: ${route.driver_name} | 車輛: ${route.vehicle_plate}
+                                </p>
+                                <p class="text-sm text-gray-600">
+                                    客戶數: ${route.total_clients} | 距離: ${route.total_distance_km.toFixed(1)} km | 
+                                    預估時間: ${Math.floor(route.estimated_duration_minutes / 60)}小時${route.estimated_duration_minutes % 60}分鐘
+                                </p>
+                            </div>
+                            <button onclick="viewRoute(${route.id})" class="text-blue-600 hover:text-blue-800">
+                                <i class="fas fa-eye"></i> 檢視
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+    
+    if (result.unassigned_clients && result.unassigned_clients.length > 0) {
+        modalContent += `
+            <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                <h3 class="font-semibold text-yellow-800 mb-2">未分配的客戶:</h3>
+                <div class="text-sm text-yellow-700">
+                    ${result.unassigned_clients.map(client => 
+                        `${client.client_code} - ${client.name}`
+                    ).join(', ')}
+                </div>
+            </div>
+        `;
+    }
+    
+    if (result.warnings && result.warnings.length > 0) {
+        modalContent += `
+            <div class="mt-4 p-3 bg-orange-50 border border-orange-200 rounded">
+                <h3 class="font-semibold text-orange-800 mb-2">警告:</h3>
+                <ul class="text-sm text-orange-700 list-disc list-inside">
+                    ${result.warnings.map(warning => `<li>${warning}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    }
+    
+    modalContent += `
+        <div class="mt-6 flex justify-end">
+            <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                確定
+            </button>
+        </div>
+    `;
+    
+    const modal = createModal(modalContent);
+    document.body.appendChild(modal);
+}
+
+// View route details
+async function viewRoute(routeId) {
+    try {
+        const response = await fetch(`${API_BASE}/routes/${routeId}`);
+        if (!response.ok) throw new Error('Failed to fetch route');
+        
+        const route = await response.json();
+        
+        const modal = document.getElementById('routeDetailsModal');
+        const content = document.getElementById('route-details-content');
+        
+        if (!modal || !content) return;
+        
+        content.innerHTML = `
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-sm text-gray-600">路線名稱</p>
+                        <p class="font-medium">${route.route_name}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">日期</p>
+                        <p class="font-medium">${formatDate(route.route_date)}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">區域</p>
+                        <p class="font-medium">${route.area}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">狀態</p>
+                        <p class="font-medium">${route.is_optimized ? '已優化' : '手動建立'}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">司機</p>
+                        <p class="font-medium">${route.driver_name || '-'}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">車輛</p>
+                        <p class="font-medium">${route.vehicle_plate || '-'} ${route.vehicle_type ? `(${route.vehicle_type})` : ''}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">總客戶數</p>
+                        <p class="font-medium">${route.total_clients}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">總距離</p>
+                        <p class="font-medium">${route.total_distance_km.toFixed(1)} km</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">預估時間</p>
+                        <p class="font-medium">${Math.floor(route.estimated_duration_minutes / 60)}小時${route.estimated_duration_minutes % 60}分鐘</p>
+                    </div>
+                    ${route.optimization_score ? `
+                    <div>
+                        <p class="text-sm text-gray-600">優化分數</p>
+                        <p class="font-medium">${(route.optimization_score * 100).toFixed(0)}%</p>
+                    </div>
+                    ` : ''}
+                </div>
+                
+                ${route.route_points && route.route_points.length > 0 ? `
+                <div class="border-t pt-4">
+                    <h4 class="font-semibold mb-3">路線點詳情</h4>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">順序</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">客戶</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">地址</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">預計到達</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">服務時間</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">距離</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                ${route.route_points.map(point => `
+                                    <tr>
+                                        <td class="px-4 py-2 text-sm">${point.sequence}</td>
+                                        <td class="px-4 py-2 text-sm">
+                                            <div>
+                                                <p class="font-medium">${point.client_name}</p>
+                                                <p class="text-gray-500">${point.client_code}</p>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-2 text-sm">${point.address}</td>
+                                        <td class="px-4 py-2 text-sm">${new Date(point.estimated_arrival).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</td>
+                                        <td class="px-4 py-2 text-sm">${point.service_time} 分鐘</td>
+                                        <td class="px-4 py-2 text-sm">${point.distance_from_previous ? `${point.distance_from_previous.toFixed(1)} km` : '-'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+        `;
+        
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        
+    } catch (error) {
+        console.error('Error viewing route:', error);
+        showNotification('載入路線詳情失敗', 'error');
+    }
+}
+
+// Show route map
+async function showRouteMap(routeId) {
+    try {
+        const response = await fetch(`${API_BASE}/routes/${routeId}/map`);
+        if (!response.ok) throw new Error('Failed to fetch route map data');
+        
+        const mapData = await response.json();
+        
+        // For now, just show the data
+        // TODO: Integrate with actual map library
+        console.log('Route map data:', mapData);
+        showNotification('地圖功能開發中', 'info');
+        
+    } catch (error) {
+        console.error('Error showing route map:', error);
+        showNotification('載入地圖失敗', 'error');
+    }
+}
+
+// Edit route
+async function editRoute(routeId) {
+    // TODO: Implement route editing
+    showNotification('編輯功能開發中', 'info');
+}
+
+// Delete route
+async function deleteRoute(routeId) {
+    if (!confirm('確定要刪除這條路線嗎？')) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/routes/${routeId}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Delete failed');
+        }
+        
+        showNotification('路線已刪除', 'success');
+        await loadRoutes(currentRoutePage);
+        
+    } catch (error) {
+        console.error('Error deleting route:', error);
+        showNotification(error.message || '刪除失敗', 'error');
+    }
+}
+
+// Show manual route creation modal
+async function showAddRouteModal() {
+    const modal = document.getElementById('addRouteModal');
+    if (!modal) return;
+    
+    // Set default date to tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    modal.querySelector('input[name="route_date"]').value = tomorrow.toISOString().split('T')[0];
+    
+    // Load drivers and vehicles
+    await loadDriversAndVehiclesForRoute();
+    
+    // Load available clients
+    await loadAvailableClients();
+    
+    // Reset selected clients
+    selectedRouteClients = [];
+    updateSelectedClientsDisplay();
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+// Load drivers and vehicles for manual route creation
+async function loadDriversAndVehiclesForRoute() {
+    try {
+        // Load drivers
+        const driversResponse = await fetch(`${API_BASE}/drivers?is_active=true`);
+        const driversData = await driversResponse.json();
+        const drivers = driversData.items || [];
+        
+        const driverSelect = document.querySelector('#add-route-form select[name="driver_id"]');
+        if (driverSelect) {
+            driverSelect.innerHTML = '<option value="">請選擇司機</option>' + 
+                drivers.map(driver => `<option value="${driver.id}">${driver.name}</option>`).join('');
+        }
+        
+        // Load vehicles
+        const vehiclesResponse = await fetch(`${API_BASE}/vehicles?is_active=true`);
+        const vehiclesData = await vehiclesResponse.json();
+        const vehicles = vehiclesData.items || [];
+        
+        const vehicleSelect = document.querySelector('#add-route-form select[name="vehicle_id"]');
+        if (vehicleSelect) {
+            vehicleSelect.innerHTML = '<option value="">請選擇車輛</option>' + 
+                vehicles.map(vehicle => `<option value="${vehicle.id}">${vehicle.plate_number} - ${vehicle.vehicle_type}</option>`).join('');
+        }
+        
+    } catch (error) {
+        console.error('Error loading drivers and vehicles:', error);
+        showNotification('載入資源失敗', 'error');
+    }
+}
+
+// Load available clients for route
+async function loadAvailableClients() {
+    try {
+        const response = await fetch(`${API_BASE}/clients?is_active=true&page_size=100`);
+        const data = await response.json();
+        const clients = data.items || [];
+        
+        displayAvailableClients(clients);
+        
+        // Setup client search
+        const searchInput = document.getElementById('route-client-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                const keyword = e.target.value.toLowerCase();
+                const filtered = clients.filter(client => 
+                    client.name.toLowerCase().includes(keyword) ||
+                    client.client_code.toLowerCase().includes(keyword) ||
+                    client.address.toLowerCase().includes(keyword)
+                );
+                displayAvailableClients(filtered);
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error loading clients:', error);
+        showNotification('載入客戶失敗', 'error');
+    }
+}
+
+// Display available clients
+function displayAvailableClients(clients) {
+    const container = document.getElementById('available-clients');
+    if (!container) return;
+    
+    container.innerHTML = clients.map(client => `
+        <div class="p-2 hover:bg-gray-50 cursor-pointer border-b" onclick="addClientToRoute(${client.id}, '${client.client_code}', '${client.name}', '${client.address}')">
+            <p class="font-medium text-sm">${client.client_code} - ${client.name}</p>
+            <p class="text-xs text-gray-600">${client.address}</p>
+        </div>
+    `).join('') || '<p class="text-gray-500 p-2">沒有可用的客戶</p>';
+}
+
+// Add client to route
+function addClientToRoute(clientId, clientCode, clientName, clientAddress) {
+    // Check if already selected
+    if (selectedRouteClients.find(c => c.id === clientId)) {
+        showNotification('客戶已在路線中', 'warning');
+        return;
+    }
+    
+    selectedRouteClients.push({
+        id: clientId,
+        code: clientCode,
+        name: clientName,
+        address: clientAddress
+    });
+    
+    updateSelectedClientsDisplay();
+}
+
+// Update selected clients display
+function updateSelectedClientsDisplay() {
+    const container = document.getElementById('selected-clients');
+    const countElement = document.getElementById('selected-clients-count');
+    
+    if (container) {
+        container.innerHTML = selectedRouteClients.map((client, index) => `
+            <div class="p-2 hover:bg-gray-50 border-b flex justify-between items-center">
+                <div class="flex-1">
+                    <p class="font-medium text-sm">${index + 1}. ${client.code} - ${client.name}</p>
+                    <p class="text-xs text-gray-600">${client.address}</p>
+                </div>
+                <button onclick="removeClientFromRoute(${index})" class="text-red-600 hover:text-red-800 ml-2">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `).join('') || '<p class="text-gray-500 p-2">尚未選擇客戶</p>';
+    }
+    
+    if (countElement) {
+        countElement.textContent = selectedRouteClients.length;
+    }
+}
+
+// Remove client from route
+function removeClientFromRoute(index) {
+    selectedRouteClients.splice(index, 1);
+    updateSelectedClientsDisplay();
+}
+
+// Handle manual route creation form submission
+document.getElementById('add-route-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    if (selectedRouteClients.length === 0) {
+        showNotification('請至少選擇一個客戶', 'warning');
+        return;
+    }
+    
+    const form = e.target;
+    const formData = new FormData(form);
+    
+    // Build route points
+    const routePoints = selectedRouteClients.map((client, index) => ({
+        client_id: client.id,
+        sequence: index + 1,
+        estimated_arrival: new Date().toISOString(), // This should be calculated properly
+        service_time: 15,
+        distance_from_previous: 0 // This should be calculated
+    }));
+    
+    const requestData = {
+        route_date: formData.get('route_date'),
+        route_name: formData.get('route_name'),
+        area: formData.get('area'),
+        driver_id: parseInt(formData.get('driver_id')),
+        vehicle_id: parseInt(formData.get('vehicle_id')),
+        route_points: routePoints
+    };
+    
+    try {
+        const response = await fetch(`${API_BASE}/routes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestData)
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Create failed');
+        }
+        
+        showNotification('路線已建立', 'success');
+        closeModal('addRouteModal');
+        await loadRoutes(1);
+        
+    } catch (error) {
+        console.error('Error creating route:', error);
+        showNotification(error.message || '建立失敗', 'error');
+    }
+});
+
+// Close modal helper function
+function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+
+// Create modal helper function
+function createModal(content) {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+    modal.innerHTML = `
+        <div class="bg-white rounded-lg p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            ${content}
+        </div>
+    `;
+    return modal;
 }
