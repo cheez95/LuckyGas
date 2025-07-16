@@ -45,6 +45,17 @@
             from { opacity: 0; }
             to { opacity: 1; }
         }
+        
+        /* Delivery tabs styling */
+        .delivery-tab {
+            position: relative;
+        }
+        .delivery-tab:not(.bg-white):hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+        .delivery-tab.bg-white {
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -331,7 +342,20 @@
         <!-- Deliveries Section -->
         <section id="deliveries" class="mb-8 hidden">
             <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold">配送管理</h2>
+                <div class="flex items-center gap-4">
+                    <h2 class="text-2xl font-bold">配送管理</h2>
+                    <!-- Tab Navigation -->
+                    <div class="flex bg-gray-200 rounded-lg p-1">
+                        <button id="tab-planned" onclick="switchDeliveryTab('planned')" 
+                                class="delivery-tab px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 bg-white text-blue-600 shadow">
+                            <i class="fas fa-clock mr-1"></i>計劃中
+                        </button>
+                        <button id="tab-history" onclick="switchDeliveryTab('history')" 
+                                class="delivery-tab px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 text-gray-600 hover:text-gray-800">
+                            <i class="fas fa-history mr-1"></i>歷史記錄
+                        </button>
+                    </div>
+                </div>
                 <div class="flex gap-2">
                     <button onclick="exportDeliveries()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">
                         <i class="fas fa-download mr-2"></i>匯出報表
@@ -1548,5 +1572,6 @@
         </div>
     </div>
     
+    <script src="app.js"></script>
 </body>
 </html>

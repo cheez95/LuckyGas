@@ -32,6 +32,9 @@ let deliveryFilters = {
     sortOrder: 'desc'
 };
 
+// Delivery tab state
+let currentDeliveryTab = 'planned';
+
 let routeFilters = {
     dateFrom: '',
     dateTo: '',
@@ -181,6 +184,54 @@ function showSection(section) {
         console.error('Error showing section:', error);
         showNotification('頁面切換失敗', 'error');
     }
+}
+
+// Delivery tab switching
+function switchDeliveryTab(tab) {
+    currentDeliveryTab = tab;
+    
+    // Update tab buttons
+    const plannedTab = document.getElementById('tab-planned');
+    const historyTab = document.getElementById('tab-history');
+    
+    if (tab === 'planned') {
+        plannedTab.classList.add('bg-white', 'text-blue-600', 'shadow');
+        plannedTab.classList.remove('text-gray-600', 'hover:text-gray-800');
+        historyTab.classList.remove('bg-white', 'text-blue-600', 'shadow');
+        historyTab.classList.add('text-gray-600', 'hover:text-gray-800');
+    } else {
+        historyTab.classList.add('bg-white', 'text-blue-600', 'shadow');
+        historyTab.classList.remove('text-gray-600', 'hover:text-gray-800');
+        plannedTab.classList.remove('bg-white', 'text-blue-600', 'shadow');
+        plannedTab.classList.add('text-gray-600', 'hover:text-gray-800');
+    }
+    
+    // Update status filter dropdown options
+    const statusFilter = document.getElementById('delivery-status');
+    if (statusFilter) {
+        statusFilter.innerHTML = '<option value="">所有狀態</option>';
+        
+        if (tab === 'planned') {
+            statusFilter.innerHTML += `
+                <option value="pending">待處理</option>
+                <option value="assigned">已指派</option>
+                <option value="in_progress">配送中</option>
+            `;
+        } else {
+            statusFilter.innerHTML += `
+                <option value="completed">已完成</option>
+                <option value="cancelled">已取消</option>
+            `;
+        }
+        
+        // Reset the status filter
+        statusFilter.value = '';
+        deliveryFilters.status = '';
+    }
+    
+    // Reset to first page and reload deliveries with appropriate filter
+    currentDeliveryPage = 1;
+    loadDeliveries(1);
 }
 
 // Dashboard with real data
@@ -540,9 +591,21 @@ async function loadDeliveries(page = 1) {
             page_size: 10
         });
         
+        // Filter based on current tab
+        if (currentDeliveryTab === 'planned') {
+            // For planned tab, show pending, assigned, and in_progress deliveries
+            params.append('status', 'pending,assigned,in_progress');
+        } else {
+            // For history tab, show completed and cancelled deliveries
+            params.append('status', 'completed,cancelled');
+        }
+        
         if (deliveryFilters.dateFrom) params.append('scheduled_date_from', deliveryFilters.dateFrom);
         if (deliveryFilters.dateTo) params.append('scheduled_date_to', deliveryFilters.dateTo);
-        if (deliveryFilters.status) params.append('status', deliveryFilters.status);
+        // Only apply status filter if it's not already filtered by tab
+        if (deliveryFilters.status && currentDeliveryTab === 'history') {
+            params.set('status', deliveryFilters.status);
+        }
         if (deliveryFilters.driverId) params.append('driver_id', deliveryFilters.driverId);
         if (deliveryFilters.clientId) params.append('client_id', deliveryFilters.clientId);
         if (deliveryFilters.sortBy) {
@@ -661,13 +724,45 @@ function updateDeliverySummary(deliveries) {
         }
     });
     
-    // Update summary display
+    // Update summary display based on current tab
     const summaryContainer = document.getElementById('delivery-summary');
     if (summaryContainer) {
+        let statusColumns = '';
+        
+        if (currentDeliveryTab === 'planned') {
+            // For planned tab: show pending, assigned, and in_progress
+            statusColumns = `
+                <div>
+                    <p class="text-gray-600">待處理</p>
+                    <p class="font-bold text-yellow-600 text-lg">${summary.byStatus.pending}</p>
+                </div>
+                <div>
+                    <p class="text-gray-600">已指派</p>
+                    <p class="font-bold text-blue-600 text-lg">${summary.byStatus.assigned}</p>
+                </div>
+                <div>
+                    <p class="text-gray-600">配送中</p>
+                    <p class="font-bold text-purple-600 text-lg">${summary.byStatus.in_progress}</p>
+                </div>
+            `;
+        } else {
+            // For history tab: show completed and cancelled
+            statusColumns = `
+                <div>
+                    <p class="text-gray-600">已完成</p>
+                    <p class="font-bold text-green-600 text-lg">${summary.byStatus.completed}</p>
+                </div>
+                <div>
+                    <p class="text-gray-600">已取消</p>
+                    <p class="font-bold text-red-600 text-lg">${summary.byStatus.cancelled}</p>
+                </div>
+            `;
+        }
+        
         summaryContainer.innerHTML = `
             <div class="bg-white rounded-lg shadow p-4 mb-6">
                 <h3 class="font-semibold mb-3">配送摘要</h3>
-                <div class="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                     <div>
                         <p class="text-gray-600">總筆數</p>
                         <p class="font-bold text-lg">${summary.total}</p>
@@ -680,18 +775,7 @@ function updateDeliverySummary(deliveries) {
                         <p class="text-gray-600">總瓦斯桶數</p>
                         <p class="font-bold text-lg">${summary.totalGas}</p>
                     </div>
-                    <div>
-                        <p class="text-gray-600">待處理</p>
-                        <p class="font-bold text-yellow-600">${summary.byStatus.pending}</p>
-                    </div>
-                    <div>
-                        <p class="text-gray-600">配送中</p>
-                        <p class="font-bold text-purple-600">${summary.byStatus.in_progress}</p>
-                    </div>
-                    <div>
-                        <p class="text-gray-600">已完成</p>
-                        <p class="font-bold text-green-600">${summary.byStatus.completed}</p>
-                    </div>
+                    ${statusColumns}
                 </div>
             </div>
         `;
