@@ -14,7 +14,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from domain.services.route_optimizer import IRouteOptimizer, OptimizationRequest, OptimizationResult
 from services.cloud_route_service import CloudRouteOptimizationService, DeliveryNode, VehicleInfo, Location
 from models.database_schema import Client
-from utils.time_utils import parse_client_time_windows
+from common.time_utils import parse_client_time_windows
 
 logger = logging.getLogger(__name__)
 

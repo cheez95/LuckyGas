@@ -13,9 +13,9 @@ from sqlalchemy import and_, or_
 
 from models.database_schema import Client, Delivery, Driver, Vehicle, Route, VehicleType, DeliveryStatus
 from services.prediction_service import GasPredictionService
-from utils.geo_utils import calculate_haversine_distance, validate_coordinates
-from utils.time_utils import parse_client_time_windows, calculate_service_time
-from utils.vehicle_utils import calculate_required_vehicle_type
+from common.geo_utils import calculate_haversine_distance, validate_coordinates
+from common.time_utils import parse_client_time_windows, calculate_service_time
+from common.vehicle_utils import calculate_required_vehicle_type
 
 logger = logging.getLogger(__name__)
 

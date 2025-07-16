@@ -14,7 +14,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from domain.services.route_optimizer import IRouteOptimizer, OptimizationRequest, OptimizationResult
 from services.route_optimization_service import RouteOptimizationService as LegacyRouteService
 from models.database_schema import Route, DeliveryStatus
-from utils.geo_utils import calculate_haversine_distance
+from common.geo_utils import calculate_haversine_distance
 
 logger = logging.getLogger(__name__)
 

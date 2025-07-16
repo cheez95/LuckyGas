@@ -27,8 +27,11 @@ playwright==1.53.0
 pytest-playwright==0.7.0
 pytest-cov==6.0.0
 
-# Optional: For Google Maps integration
-# googlemaps==4.10.0
+# Cloud services and optimization
+googlemaps==4.10.0
+ortools==9.14.6206
+python-dotenv==1.1.1
+scikit-learn==1.7.0
 
 # Optional: For SMS notifications
 # twilio==9.5.3

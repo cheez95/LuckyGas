@@ -56,6 +56,9 @@ session.close()
 "
 fi
 
+# 設定 PYTHONPATH
+export PYTHONPATH="${PYTHONPATH}:${PWD}/src/main/python"
+
 # 啟動 API
 echo "✅ Starting API server..."
 echo "📋 API Documentation: http://localhost:8000/docs"

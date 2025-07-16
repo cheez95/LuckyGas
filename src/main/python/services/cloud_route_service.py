@@ -3,7 +3,7 @@ Cloud-based route optimization service
 Uses Google OR-Tools and cloud mapping services for advanced route planning
 """
 
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta, time, date
 from typing import List, Dict, Tuple, Optional, Any
 import logging
 from dataclasses import dataclass
@@ -20,9 +20,9 @@ sys.path.append(str(Path(__file__).parent.parent))
 from models.database_schema import Client, Delivery, Driver, Vehicle, Route, DeliveryStatus, VehicleType
 from integrations.google_maps_client import GoogleMapsClient, Location
 from config.cloud_config import cloud_config
-from utils.geo_utils import calculate_haversine_distance
-from utils.time_utils import parse_client_time_windows, calculate_service_time
-from utils.vehicle_utils import calculate_required_vehicle_type
+from common.geo_utils import calculate_haversine_distance
+from common.time_utils import parse_client_time_windows, calculate_service_time
+from common.vehicle_utils import calculate_required_vehicle_type
 
 logger = logging.getLogger(__name__)
 
@@ -440,7 +440,7 @@ class CloudRouteOptimizationService:
         
         # Map our vehicle utilities types to database VehicleType
         # Since database only has CAR and MOTORCYCLE, we map accordingly
-        from utils.vehicle_utils import VehicleType as UtilVehicleType
+        from common.vehicle_utils import VehicleType as UtilVehicleType
         
         if vehicle_type_needed in [UtilVehicleType.SMALL, UtilVehicleType.MEDIUM]:
             return VehicleType.MOTORCYCLE if sum(demand.values()) <= 5 else VehicleType.CAR
