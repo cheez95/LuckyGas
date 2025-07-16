@@ -1,8 +1,170 @@
+/**
+ * Validation and sanitization utilities will be loaded as separate scripts
+ * They should be included in the HTML before app.js
+ */
+
+/**
+ * Security Utilities for XSS Prevention
+ * Inline version to ensure immediate availability
+ */
+const SecurityUtils = {
+    escapeHtml: function(text) {
+        if (text === null || text === undefined) return '';
+        const div = document.createElement('div');
+        div.textContent = String(text);
+        return div.innerHTML;
+    },
+    
+    createTextNode: function(text) {
+        return document.createTextNode(String(text || ''));
+    },
+    
+    createElement: function(tag, attributes = {}, children = []) {
+        const element = document.createElement(tag);
+        
+        Object.entries(attributes).forEach(([key, value]) => {
+            if (key === 'className') {
+                element.className = value;
+            } else if (key === 'id') {
+                element.id = value;
+            } else if (key.startsWith('data-')) {
+                element.setAttribute(key, value);
+            } else if (key === 'onclick' && typeof value === 'function') {
+                element.addEventListener('click', value);
+            } else if (key === 'title') {
+                element.title = value;
+            } else {
+                element.setAttribute(key, String(value));
+            }
+        });
+        
+        children.forEach(child => {
+            if (typeof child === 'string') {
+                element.appendChild(this.createTextNode(child));
+            } else if (child instanceof Node) {
+                element.appendChild(child);
+            }
+        });
+        
+        return element;
+    },
+    
+    createOption: function(value, text, selected = false) {
+        const option = document.createElement('option');
+        option.value = String(value);
+        option.textContent = String(text);
+        if (selected) option.selected = true;
+        return option;
+    }
+};
+
+/**
+ * CSRF Protection Module
+ * Inline implementation for immediate availability
+ */
+const CSRFManager = {
+    TOKEN_KEY: window.APP_CONFIG?.STORAGE_KEYS?.CSRF_TOKEN || 'csrf_token',
+    TOKEN_HEADER: window.APP_CONFIG?.SECURITY?.CSRF?.TOKEN_HEADER || 'X-CSRF-Token',
+    TOKEN_EXPIRY: window.APP_CONFIG?.SECURITY?.CSRF?.TOKEN_EXPIRY || 24 * 60 * 60 * 1000, // 24 hours
+    
+    _generateSecureToken: function() {
+        const tokenLength = window.APP_CONFIG?.SECURITY?.CSRF?.TOKEN_LENGTH || 32;
+        const array = new Uint8Array(tokenLength);
+        crypto.getRandomValues(array);
+        return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+    },
+    
+    _getStoredToken: function() {
+        try {
+            const stored = localStorage.getItem(this.TOKEN_KEY);
+            return stored ? JSON.parse(stored) : null;
+        } catch (e) {
+            console.error('Failed to parse CSRF token:', e);
+            return null;
+        }
+    },
+    
+    _isTokenExpired: function(tokenData) {
+        if (!tokenData || !tokenData.createdAt) return true;
+        return Date.now() - tokenData.createdAt > this.TOKEN_EXPIRY;
+    },
+    
+    _generateNewToken: function() {
+        const token = this._generateSecureToken();
+        const tokenData = {
+            value: token,
+            createdAt: Date.now()
+        };
+        localStorage.setItem(this.TOKEN_KEY, JSON.stringify(tokenData));
+        return token;
+    },
+    
+    getToken: function() {
+        const storedToken = this._getStoredToken();
+        if (!storedToken || this._isTokenExpired(storedToken)) {
+            return this._generateNewToken();
+        }
+        return storedToken.value;
+    },
+    
+    getHeaders: function() {
+        return {
+            [this.TOKEN_HEADER]: this.getToken()
+        };
+    },
+    
+    refreshToken: function() {
+        return this._generateNewToken();
+    }
+};
+
+// Initialize CSRF token
+CSRFManager.getToken();
+
+/**
+ * Secure Fetch Wrapper
+ * Automatically adds CSRF protection to API requests
+ */
+const PROTECTED_METHODS = window.APP_CONSTANTS?.PROTECTED_METHODS || ['POST', 'PUT', 'DELETE', 'PATCH'];
+
+async function secureFetch(url, options = {}) {
+    const config = {
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    };
+    
+    // Add CSRF token for protected methods
+    const method = (config.method || 'GET').toUpperCase();
+    if (PROTECTED_METHODS.includes(method)) {
+        Object.assign(config.headers, CSRFManager.getHeaders());
+    }
+    
+    try {
+        const response = await fetch(url, config);
+        
+        // Handle CSRF token refresh if needed
+        if (response.status === 403 && response.headers.get('X-CSRF-Error') === 'invalid-token') {
+            // Refresh token and retry once
+            CSRFManager.refreshToken();
+            Object.assign(config.headers, CSRFManager.getHeaders());
+            return fetch(url, config);
+        }
+        
+        return response;
+    } catch (error) {
+        console.error('Secure fetch error:', error);
+        throw error;
+    }
+}
+
 // API Base URL
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = window.APP_CONFIG?.API?.BASE_URL || 'http://localhost:8000/api';
 
 // State
-let currentPage = 'dashboard';
+let currentPage = window.APP_CONSTANTS?.PAGES?.DASHBOARD || 'dashboard';
 let currentClientPage = 1;
 let currentDeliveryPage = 1;
 let currentRoutePage = 1;
@@ -33,7 +195,7 @@ let deliveryFilters = {
 };
 
 // Delivery tab state - restore from localStorage if available
-let currentDeliveryTab = localStorage.getItem('currentDeliveryTab') || 'planned';
+let currentDeliveryTab = localStorage.getItem(window.APP_CONFIG?.STORAGE_KEYS?.CURRENT_TAB || 'currentDeliveryTab') || window.APP_CONSTANTS?.TABS?.PLANNED || 'planned';
 let isLoadingDeliveries = false; // Flag to prevent recursive calls
 
 let routeFilters = {
@@ -149,10 +311,11 @@ function showSection(section) {
             currentPage = section;
         
         // Update active nav
+        const navActiveClasses = window.APP_CONSTANTS?.CSS_CLASSES?.NAV_ACTIVE?.split(' ') || ['text-blue-200', 'font-bold'];
         document.querySelectorAll('.nav-link').forEach(link => {
-            link.classList.remove('text-blue-200', 'font-bold');
+            link.classList.remove(...navActiveClasses);
             if (link.getAttribute('href') === `#${section}`) {
-                link.classList.add('text-blue-200', 'font-bold');
+                link.classList.add(...navActiveClasses);
             }
         });
         
@@ -172,7 +335,7 @@ function showSection(section) {
                     break;
                 case 'deliveries':
                     // Restore tab state when first showing deliveries section
-                    const savedTab = localStorage.getItem('currentDeliveryTab');
+                    const savedTab = localStorage.getItem(window.APP_CONFIG?.STORAGE_KEYS?.CURRENT_TAB || 'currentDeliveryTab');
                     if (savedTab && savedTab !== currentDeliveryTab) {
                         // Update the tab without triggering a reload
                         currentDeliveryTab = savedTab;
@@ -180,16 +343,18 @@ function showSection(section) {
                         const plannedTab = document.getElementById('tab-planned');
                         const historyTab = document.getElementById('tab-history');
                         if (plannedTab && historyTab) {
+                            const tabActiveClasses = window.APP_CONSTANTS?.CSS_CLASSES?.TAB_ACTIVE?.split(' ') || ['bg-white', 'text-blue-600', 'shadow'];
+                            const tabInactiveClasses = window.APP_CONSTANTS?.CSS_CLASSES?.TAB_INACTIVE?.split(' ') || ['text-gray-600', 'hover:text-gray-800'];
                             if (savedTab === 'planned') {
-                                plannedTab.classList.add('bg-white', 'text-blue-600', 'shadow');
-                                plannedTab.classList.remove('text-gray-600', 'hover:text-gray-800');
-                                historyTab.classList.remove('bg-white', 'text-blue-600', 'shadow');
-                                historyTab.classList.add('text-gray-600', 'hover:text-gray-800');
+                                plannedTab.classList.add(...tabActiveClasses);
+                                plannedTab.classList.remove(...tabInactiveClasses);
+                                historyTab.classList.remove(...tabActiveClasses);
+                                historyTab.classList.add(...tabInactiveClasses);
                             } else {
-                                historyTab.classList.add('bg-white', 'text-blue-600', 'shadow');
-                                historyTab.classList.remove('text-gray-600', 'hover:text-gray-800');
-                                plannedTab.classList.remove('bg-white', 'text-blue-600', 'shadow');
-                                plannedTab.classList.add('text-gray-600', 'hover:text-gray-800');
+                                historyTab.classList.add(...tabActiveClasses);
+                                historyTab.classList.remove(...tabInactiveClasses);
+                                plannedTab.classList.remove(...tabActiveClasses);
+                                plannedTab.classList.add(...tabInactiveClasses);
                             }
                         }
                     }
@@ -214,40 +379,45 @@ function switchDeliveryTab(tab) {
     currentDeliveryTab = tab;
     
     // Save tab selection to localStorage
-    localStorage.setItem('currentDeliveryTab', tab);
+    localStorage.setItem(window.APP_CONFIG?.STORAGE_KEYS?.CURRENT_TAB || 'currentDeliveryTab', tab);
     
     // Update tab buttons
     const plannedTab = document.getElementById('tab-planned');
     const historyTab = document.getElementById('tab-history');
     
+    const tabActiveClasses = window.APP_CONSTANTS?.CSS_CLASSES?.TAB_ACTIVE?.split(' ') || ['bg-white', 'text-blue-600', 'shadow'];
+    const tabInactiveClasses = window.APP_CONSTANTS?.CSS_CLASSES?.TAB_INACTIVE?.split(' ') || ['text-gray-600', 'hover:text-gray-800'];
+    
     if (tab === 'planned') {
-        plannedTab.classList.add('bg-white', 'text-blue-600', 'shadow');
-        plannedTab.classList.remove('text-gray-600', 'hover:text-gray-800');
-        historyTab.classList.remove('bg-white', 'text-blue-600', 'shadow');
-        historyTab.classList.add('text-gray-600', 'hover:text-gray-800');
+        plannedTab.classList.add(...tabActiveClasses);
+        plannedTab.classList.remove(...tabInactiveClasses);
+        historyTab.classList.remove(...tabActiveClasses);
+        historyTab.classList.add(...tabInactiveClasses);
     } else {
-        historyTab.classList.add('bg-white', 'text-blue-600', 'shadow');
-        historyTab.classList.remove('text-gray-600', 'hover:text-gray-800');
-        plannedTab.classList.remove('bg-white', 'text-blue-600', 'shadow');
-        plannedTab.classList.add('text-gray-600', 'hover:text-gray-800');
+        historyTab.classList.add(...tabActiveClasses);
+        historyTab.classList.remove(...tabInactiveClasses);
+        plannedTab.classList.remove(...tabActiveClasses);
+        plannedTab.classList.add(...tabInactiveClasses);
     }
     
     // Update status filter dropdown options
     const statusFilter = document.getElementById('delivery-status');
     if (statusFilter) {
-        statusFilter.innerHTML = '<option value="">所有狀態</option>';
+        // Clear existing options safely
+        while (statusFilter.firstChild) {
+            statusFilter.removeChild(statusFilter.firstChild);
+        }
+        
+        // Add default option
+        statusFilter.appendChild(SecurityUtils.createOption('', '所有狀態'));
         
         if (tab === 'planned') {
-            statusFilter.innerHTML += `
-                <option value="pending">待處理</option>
-                <option value="assigned">已指派</option>
-                <option value="in_progress">配送中</option>
-            `;
+            statusFilter.appendChild(SecurityUtils.createOption('pending', '待處理'));
+            statusFilter.appendChild(SecurityUtils.createOption('assigned', '已指派'));
+            statusFilter.appendChild(SecurityUtils.createOption('in_progress', '配送中'));
         } else {
-            statusFilter.innerHTML += `
-                <option value="completed">已完成</option>
-                <option value="cancelled">已取消</option>
-            `;
+            statusFilter.appendChild(SecurityUtils.createOption('completed', '已完成'));
+            statusFilter.appendChild(SecurityUtils.createOption('cancelled', '已取消'));
         }
         
         // Reset the status filter
@@ -330,15 +500,15 @@ function loadWeeklyDeliveryChartFromStats(weekTrend) {
                 datasets: [{
                     label: '總配送數',
                     data: totalData,
-                    borderColor: 'rgb(59, 130, 246)',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    tension: 0.1
+                    borderColor: window.APP_CONSTANTS?.CHART_COLORS?.PRIMARY || 'rgb(59, 130, 246)',
+                    backgroundColor: window.APP_CONSTANTS?.CHART_COLORS?.PRIMARY_ALPHA || 'rgba(59, 130, 246, 0.1)',
+                    tension: window.APP_CONFIG?.UI?.CHARTS?.LINE_TENSION || 0.1
                 }, {
                     label: '已完成',
                     data: completedData,
-                    borderColor: 'rgb(34, 197, 94)',
-                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                    tension: 0.1
+                    borderColor: window.APP_CONSTANTS?.CHART_COLORS?.SUCCESS || 'rgb(34, 197, 94)',
+                    backgroundColor: window.APP_CONSTANTS?.CHART_COLORS?.SUCCESS_ALPHA || 'rgba(34, 197, 94, 0.1)',
+                    tension: window.APP_CONFIG?.UI?.CHARTS?.LINE_TENSION || 0.1
                 }]
             },
             options: {
@@ -389,10 +559,10 @@ function loadStatusChartFromStats(todayDeliveries) {
             datasets: [{
                 data: [completed, pending, inProgress, cancelled],
                 backgroundColor: [
-                    'rgba(34, 197, 94, 0.8)',
-                    'rgba(251, 191, 36, 0.8)',
-                    'rgba(59, 130, 246, 0.8)',
-                    'rgba(239, 68, 68, 0.8)'
+                    window.APP_CONSTANTS?.CHART_COLORS?.SUCCESS || 'rgba(34, 197, 94, 0.8)',
+                    window.APP_CONSTANTS?.CHART_COLORS?.WARNING || 'rgba(251, 191, 36, 0.8)',
+                    window.APP_CONSTANTS?.CHART_COLORS?.INFO || 'rgba(59, 130, 246, 0.8)',
+                    window.APP_CONSTANTS?.CHART_COLORS?.DANGER || 'rgba(239, 68, 68, 0.8)'
                 ],
                 borderWidth: 0
             }]
@@ -473,7 +643,14 @@ function loadRecentActivitiesFromStats(recentActivities) {
         const container = document.getElementById('recent-activities');
         if (!container) return;
         
-        container.innerHTML = '<h3 class="text-lg font-semibold mb-4">最近活動</h3>';
+        // Clear existing content safely
+        while (container.firstChild) {
+            container.removeChild(container.firstChild);
+        }
+        
+        // Add heading
+        const heading = SecurityUtils.createElement('h3', { className: 'text-lg font-semibold mb-4' }, ['最近活動']);
+        container.appendChild(heading);
         
         if (recentActivities && recentActivities.length > 0) {
             const list = document.createElement('div');
@@ -493,23 +670,36 @@ function loadRecentActivitiesFromStats(recentActivities) {
                 
                 const statusText = getStatusText(activity.status);
                 
-                item.innerHTML = `
-                    <div>
-                        <p class="font-medium">${activity.client_name}</p>
-                        <p class="text-sm text-gray-600">${activity.scheduled_date} - ${activity.driver_name}</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-sm ${statusColors[activity.status] || 'text-gray-600'}">${statusText}</p>
-                        <p class="text-xs text-gray-500">${activity.updated_at}</p>
-                    </div>
-                `;
+                // Create left side content
+                const leftDiv = document.createElement('div');
+                const clientNameP = SecurityUtils.createElement('p', { className: 'font-medium' }, 
+                    [activity.client_name]);
+                const scheduleP = SecurityUtils.createElement('p', { className: 'text-sm text-gray-600' }, 
+                    [activity.scheduled_date + ' - ' + activity.driver_name]);
+                leftDiv.appendChild(clientNameP);
+                leftDiv.appendChild(scheduleP);
                 
+                // Create right side content
+                const rightDiv = document.createElement('div');
+                rightDiv.className = 'text-right';
+                const statusP = SecurityUtils.createElement('p', 
+                    { className: `text-sm ${statusColors[activity.status] || 'text-gray-600'}` }, 
+                    [statusText]);
+                const updatedP = SecurityUtils.createElement('p', { className: 'text-xs text-gray-500' }, 
+                    [activity.updated_at]);
+                rightDiv.appendChild(statusP);
+                rightDiv.appendChild(updatedP);
+                
+                item.appendChild(leftDiv);
+                item.appendChild(rightDiv);
                 list.appendChild(item);
             });
             
             container.appendChild(list);
         } else {
-            container.innerHTML += '<p class="text-gray-500">暫無最近活動</p>';
+            const noActivityP = SecurityUtils.createElement('p', { className: 'text-gray-500' }, 
+                ['暫無最近活動']);
+            container.appendChild(noActivityP);
         }
     } catch (error) {
         console.error('Error loading recent activities:', error);
@@ -522,7 +712,7 @@ async function loadClients(page = 1) {
         // Build query parameters
         const params = new URLSearchParams({
             page: page,
-            page_size: 10
+            page_size: window.APP_CONFIG?.PAGINATION?.DEFAULT_PAGE_SIZE || 10
         });
         
         if (clientFilters.keyword) params.append('keyword', clientFilters.keyword);
@@ -553,57 +743,123 @@ async function loadClients(page = 1) {
 
 function renderClientsTable(clients) {
     const tbody = document.getElementById('clients-tbody');
-    tbody.innerHTML = '';
+    // Clear existing content safely
+    while (tbody.firstChild) {
+        tbody.removeChild(tbody.firstChild);
+    }
     
     if (clients.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="7" class="px-6 py-4 text-center text-gray-500">
-                    沒有找到符合條件的客戶
-                </td>
-            </tr>
-        `;
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 7;
+        cell.className = 'px-6 py-4 text-center text-gray-500';
+        cell.textContent = '沒有找到符合條件的客戶';
+        row.appendChild(cell);
+        tbody.appendChild(row);
         return;
     }
     
     clients.forEach(client => {
         const row = document.createElement('tr');
         row.className = 'hover:bg-gray-50 transition-colors';
-        row.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                <div class="text-gray-900">${client.client_code || client.id}</div>
-                <div class="text-xs text-gray-500">ID: ${client.id}</div>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap">
-                <div>
-                    <div class="font-medium">${client.name || '-'}</div>
-                    <div class="text-sm text-gray-600">${client.invoice_title || '-'}</div>
-                    ${client.contact_person ? `<div class="text-xs text-gray-500">${client.contact_person}</div>` : ''}
-                </div>
-            </td>
-            <td class="px-6 py-4 text-sm">${client.address}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm">${client.district || '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                <div>${client.total_orders || 0} 筆</div>
-                ${client.last_order_date ? `<div class="text-xs text-gray-500">${formatDate(client.last_order_date)}</div>` : ''}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap">
-                <span class="px-2 py-1 text-xs rounded-full ${client.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
-                    ${client.is_active ? '啟用' : '停用'}
-                </span>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                <button onclick="viewClient('${client.client_code}')" class="text-blue-600 hover:text-blue-900 mr-2" title="檢視">
-                    <i class="fas fa-eye"></i>
-                </button>
-                <button onclick="editClient('${client.client_code}')" class="text-green-600 hover:text-green-900 mr-2" title="編輯">
-                    <i class="fas fa-edit"></i>
-                </button>
-                <button onclick="toggleClientStatus('${client.client_code}', ${client.is_active})" class="text-orange-600 hover:text-orange-900" title="${client.is_active ? '停用' : '啟用'}">
-                    <i class="fas fa-${client.is_active ? 'pause' : 'play'}"></i>
-                </button>
-            </td>
-        `;
+        
+        // Cell 1: Client Code/ID
+        const cell1 = document.createElement('td');
+        cell1.className = 'px-6 py-4 whitespace-nowrap text-sm';
+        const codeDiv = SecurityUtils.createElement('div', { className: 'text-gray-900' }, 
+            [client.client_code || client.id]);
+        const idDiv = SecurityUtils.createElement('div', { className: 'text-xs text-gray-500' }, 
+            ['ID: ' + client.id]);
+        cell1.appendChild(codeDiv);
+        cell1.appendChild(idDiv);
+        row.appendChild(cell1);
+        
+        // Cell 2: Name and Contact Info
+        const cell2 = document.createElement('td');
+        cell2.className = 'px-6 py-4 whitespace-nowrap';
+        const nameContainer = document.createElement('div');
+        
+        const nameDiv = SecurityUtils.createElement('div', { className: 'font-medium' }, 
+            [client.name || '-']);
+        nameContainer.appendChild(nameDiv);
+        
+        const invoiceDiv = SecurityUtils.createElement('div', { className: 'text-sm text-gray-600' }, 
+            [client.invoice_title || '-']);
+        nameContainer.appendChild(invoiceDiv);
+        
+        if (client.contact_person) {
+            const contactDiv = SecurityUtils.createElement('div', { className: 'text-xs text-gray-500' }, 
+                [client.contact_person]);
+            nameContainer.appendChild(contactDiv);
+        }
+        
+        cell2.appendChild(nameContainer);
+        row.appendChild(cell2);
+        
+        // Cell 3: Address
+        const cell3 = document.createElement('td');
+        cell3.className = 'px-6 py-4 text-sm';
+        cell3.textContent = client.address;
+        row.appendChild(cell3);
+        
+        // Cell 4: District
+        const cell4 = document.createElement('td');
+        cell4.className = 'px-6 py-4 whitespace-nowrap text-sm';
+        cell4.textContent = client.district || '-';
+        row.appendChild(cell4);
+        
+        // Cell 5: Orders
+        const cell5 = document.createElement('td');
+        cell5.className = 'px-6 py-4 whitespace-nowrap text-sm';
+        const ordersDiv = SecurityUtils.createElement('div', {}, 
+            [(client.total_orders || 0) + ' 筆']);
+        cell5.appendChild(ordersDiv);
+        
+        if (client.last_order_date) {
+            const dateDiv = SecurityUtils.createElement('div', { className: 'text-xs text-gray-500' }, 
+                [formatDate(client.last_order_date)]);
+            cell5.appendChild(dateDiv);
+        }
+        row.appendChild(cell5);
+        
+        // Cell 6: Status
+        const cell6 = document.createElement('td');
+        cell6.className = 'px-6 py-4 whitespace-nowrap';
+        const statusSpan = SecurityUtils.createElement('span', 
+            { className: `px-2 py-1 text-xs rounded-full ${client.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}` }, 
+            [client.is_active ? '啟用' : '停用']);
+        cell6.appendChild(statusSpan);
+        row.appendChild(cell6);
+        
+        // Cell 7: Actions
+        const cell7 = document.createElement('td');
+        cell7.className = 'px-6 py-4 whitespace-nowrap text-sm';
+        
+        // View button
+        const viewBtn = document.createElement('button');
+        viewBtn.className = 'text-blue-600 hover:text-blue-900 mr-2';
+        viewBtn.title = '檢視';
+        viewBtn.onclick = function() { viewClient(client.client_code); };
+        viewBtn.innerHTML = '<i class="fas fa-eye"></i>';
+        cell7.appendChild(viewBtn);
+        
+        // Edit button
+        const editBtn = document.createElement('button');
+        editBtn.className = 'text-green-600 hover:text-green-900 mr-2';
+        editBtn.title = '編輯';
+        editBtn.onclick = function() { editClient(client.client_code); };
+        editBtn.innerHTML = '<i class="fas fa-edit"></i>';
+        cell7.appendChild(editBtn);
+        
+        // Toggle status button
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'text-orange-600 hover:text-orange-900';
+        toggleBtn.title = client.is_active ? '停用' : '啟用';
+        toggleBtn.onclick = function() { toggleClientStatus(client.client_code, client.is_active); };
+        toggleBtn.innerHTML = `<i class="fas fa-${client.is_active ? 'pause' : 'play'}"></i>`;
+        cell7.appendChild(toggleBtn);
+        
+        row.appendChild(cell7);
         tbody.appendChild(row);
     });
 }
@@ -626,7 +882,7 @@ async function loadDeliveries(page = 1) {
         // Build query parameters
         const params = new URLSearchParams({
             page: page,
-            page_size: 10
+            page_size: window.APP_CONFIG?.PAGINATION?.DEFAULT_PAGE_SIZE || 10
         });
         
         // Filter based on current tab
@@ -702,13 +958,18 @@ async function loadDeliveries(page = 1) {
         // Show empty state in table
         const tbody = document.getElementById('deliveries-tbody');
         if (tbody) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="8" class="px-6 py-4 text-center text-red-500">
-                        ${errorMessage}
-                    </td>
-                </tr>
-            `;
+            // Clear existing content safely
+            while (tbody.firstChild) {
+                tbody.removeChild(tbody.firstChild);
+            }
+            
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = 8;
+            cell.className = 'px-6 py-4 text-center text-red-500';
+            cell.textContent = errorMessage;
+            row.appendChild(cell);
+            tbody.appendChild(row);
         }
         
         // Reset loading flag even on error
@@ -718,68 +979,118 @@ async function loadDeliveries(page = 1) {
 
 function renderDeliveriesTable(deliveries) {
     const tbody = document.getElementById('deliveries-tbody');
-    tbody.innerHTML = '';
+    // Clear existing content safely
+    while (tbody.firstChild) {
+        tbody.removeChild(tbody.firstChild);
+    }
     
     if (deliveries.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="8" class="px-6 py-4 text-center text-gray-500">
-                    沒有找到符合條件的配送單
-                </td>
-            </tr>
-        `;
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 8;
+        cell.className = 'px-6 py-4 text-center text-gray-500';
+        cell.textContent = '沒有找到符合條件的配送單';
+        row.appendChild(cell);
+        tbody.appendChild(row);
         return;
     }
     
     deliveries.forEach(delivery => {
-        const statusMap = {
-            'pending': { text: '待處理', class: 'bg-yellow-100 text-yellow-800' },
-            'assigned': { text: '已指派', class: 'bg-blue-100 text-blue-800' },
-            'in_progress': { text: '配送中', class: 'bg-purple-100 text-purple-800' },
-            'completed': { text: '已完成', class: 'bg-green-100 text-green-800' },
-            'cancelled': { text: '已取消', class: 'bg-red-100 text-red-800' }
+        const statusDisplay = window.APP_CONSTANTS?.STATUS_DISPLAY || {};
+        const status = statusDisplay[delivery.status] || { 
+            text: delivery.status, 
+            class: 'bg-gray-100 text-gray-800' 
         };
-        
-        const status = statusMap[delivery.status] || { text: delivery.status, class: 'bg-gray-100 text-gray-800' };
         
         const row = document.createElement('tr');
         row.className = 'hover:bg-gray-50 transition-colors';
-        row.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">${delivery.order_number || delivery.id}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm">${delivery.client_name || '-'}</td>
-            <td class="px-6 py-4 text-sm">
-                <div>${delivery.delivery_address}</div>
-                <div class="text-xs text-gray-500">${delivery.delivery_district || ''}</div>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                <div>${formatDate(delivery.scheduled_date)}</div>
-                <div class="text-xs text-gray-500">${delivery.scheduled_time_slot || '-'}</div>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                ${delivery.gas_quantity} 桶 / $${delivery.total_amount}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap">
-                <span class="px-2 py-1 text-xs rounded-full ${status.class}">
-                    ${status.text}
-                </span>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm">${delivery.driver_name || '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                ${delivery.status === 'pending' ? `
-                    <button onclick="assignDelivery(${delivery.id})" class="text-blue-600 hover:text-blue-900 mr-2" title="指派">
-                        <i class="fas fa-user-plus"></i>
-                    </button>
-                ` : ''}
-                <button onclick="viewDelivery(${delivery.id})" class="text-green-600 hover:text-green-900 mr-2" title="檢視">
-                    <i class="fas fa-eye"></i>
-                </button>
-                ${delivery.status !== 'completed' && delivery.status !== 'cancelled' ? `
-                    <button onclick="updateDeliveryStatus(${delivery.id}, '${delivery.status}')" class="text-purple-600 hover:text-purple-900" title="更新狀態">
-                        <i class="fas fa-sync"></i>
-                    </button>
-                ` : ''}
-            </td>
-        `;
+        
+        // Cell 1: Order Number
+        const cell1 = document.createElement('td');
+        cell1.className = 'px-6 py-4 whitespace-nowrap text-sm font-medium';
+        cell1.textContent = delivery.order_number || delivery.id;
+        row.appendChild(cell1);
+        
+        // Cell 2: Client Name
+        const cell2 = document.createElement('td');
+        cell2.className = 'px-6 py-4 whitespace-nowrap text-sm';
+        cell2.textContent = delivery.client_name || '-';
+        row.appendChild(cell2);
+        
+        // Cell 3: Delivery Address
+        const cell3 = document.createElement('td');
+        cell3.className = 'px-6 py-4 text-sm';
+        const addressDiv = SecurityUtils.createElement('div', {}, [delivery.delivery_address]);
+        const districtDiv = SecurityUtils.createElement('div', { className: 'text-xs text-gray-500' }, 
+            [delivery.delivery_district || '']);
+        cell3.appendChild(addressDiv);
+        cell3.appendChild(districtDiv);
+        row.appendChild(cell3);
+        
+        // Cell 4: Scheduled Date/Time
+        const cell4 = document.createElement('td');
+        cell4.className = 'px-6 py-4 whitespace-nowrap text-sm';
+        const dateDiv = SecurityUtils.createElement('div', {}, [formatDate(delivery.scheduled_date)]);
+        const timeDiv = SecurityUtils.createElement('div', { className: 'text-xs text-gray-500' }, 
+            [delivery.scheduled_time_slot || '-']);
+        cell4.appendChild(dateDiv);
+        cell4.appendChild(timeDiv);
+        row.appendChild(cell4);
+        
+        // Cell 5: Quantity/Amount
+        const cell5 = document.createElement('td');
+        cell5.className = 'px-6 py-4 whitespace-nowrap text-sm';
+        cell5.textContent = `${delivery.gas_quantity} 桶 / $${delivery.total_amount}`;
+        row.appendChild(cell5);
+        
+        // Cell 6: Status
+        const cell6 = document.createElement('td');
+        cell6.className = 'px-6 py-4 whitespace-nowrap';
+        const statusSpan = SecurityUtils.createElement('span', 
+            { className: `px-2 py-1 text-xs rounded-full ${status.class}` }, 
+            [status.text]);
+        cell6.appendChild(statusSpan);
+        row.appendChild(cell6);
+        
+        // Cell 7: Driver Name
+        const cell7 = document.createElement('td');
+        cell7.className = 'px-6 py-4 whitespace-nowrap text-sm';
+        cell7.textContent = delivery.driver_name || '-';
+        row.appendChild(cell7);
+        
+        // Cell 8: Actions
+        const cell8 = document.createElement('td');
+        cell8.className = 'px-6 py-4 whitespace-nowrap text-sm';
+        
+        // Assign button (only for pending deliveries)
+        if (delivery.status === 'pending') {
+            const assignBtn = document.createElement('button');
+            assignBtn.className = 'text-blue-600 hover:text-blue-900 mr-2';
+            assignBtn.title = '指派';
+            assignBtn.onclick = function() { assignDelivery(delivery.id); };
+            assignBtn.innerHTML = '<i class="fas fa-user-plus"></i>';
+            cell8.appendChild(assignBtn);
+        }
+        
+        // View button
+        const viewBtn = document.createElement('button');
+        viewBtn.className = 'text-green-600 hover:text-green-900 mr-2';
+        viewBtn.title = '檢視';
+        viewBtn.onclick = function() { viewDelivery(delivery.id); };
+        viewBtn.innerHTML = '<i class="fas fa-eye"></i>';
+        cell8.appendChild(viewBtn);
+        
+        // Update status button (not for completed/cancelled)
+        if (delivery.status !== 'completed' && delivery.status !== 'cancelled') {
+            const updateBtn = document.createElement('button');
+            updateBtn.className = 'text-purple-600 hover:text-purple-900';
+            updateBtn.title = '更新狀態';
+            updateBtn.onclick = function() { updateDeliveryStatus(delivery.id, delivery.status); };
+            updateBtn.innerHTML = '<i class="fas fa-sync"></i>';
+            cell8.appendChild(updateBtn);
+        }
+        
+        row.appendChild(cell8);
         tbody.appendChild(row);
     });
 }
@@ -841,26 +1152,71 @@ function updateDeliverySummary(deliveries) {
             `;
         }
         
-        summaryContainer.innerHTML = `
-            <div class="bg-white rounded-lg shadow p-4 mb-6">
-                <h3 class="font-semibold mb-3">配送摘要</h3>
-                <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                    <div>
-                        <p class="text-gray-600">總筆數</p>
-                        <p class="font-bold text-lg">${summary.total}</p>
-                    </div>
-                    <div>
-                        <p class="text-gray-600">總金額</p>
-                        <p class="font-bold text-lg">$${summary.totalAmount.toLocaleString()}</p>
-                    </div>
-                    <div>
-                        <p class="text-gray-600">總瓦斯桶數</p>
-                        <p class="font-bold text-lg">${summary.totalGas}</p>
-                    </div>
-                    ${statusColumns}
-                </div>
-            </div>
-        `;
+        // Clear existing content safely
+        while (summaryContainer.firstChild) {
+            summaryContainer.removeChild(summaryContainer.firstChild);
+        }
+        
+        // Create main container
+        const mainDiv = SecurityUtils.createElement('div', { className: 'bg-white rounded-lg shadow p-4 mb-6' }, []);
+        
+        // Add heading
+        const heading = SecurityUtils.createElement('h3', { className: 'font-semibold mb-3' }, ['配送摘要']);
+        mainDiv.appendChild(heading);
+        
+        // Create grid container
+        const gridDiv = SecurityUtils.createElement('div', { className: 'grid grid-cols-2 md:grid-cols-5 gap-4 text-sm' }, []);
+        
+        // Add total count
+        const totalDiv = document.createElement('div');
+        totalDiv.appendChild(SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['總筆數']));
+        totalDiv.appendChild(SecurityUtils.createElement('p', { className: 'font-bold text-lg' }, [String(summary.total)]));
+        gridDiv.appendChild(totalDiv);
+        
+        // Add total amount
+        const amountDiv = document.createElement('div');
+        amountDiv.appendChild(SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['總金額']));
+        amountDiv.appendChild(SecurityUtils.createElement('p', { className: 'font-bold text-lg' }, ['$' + summary.totalAmount.toLocaleString()]));
+        gridDiv.appendChild(amountDiv);
+        
+        // Add total gas
+        const gasDiv = document.createElement('div');
+        gasDiv.appendChild(SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['總瓦斯桶數']));
+        gasDiv.appendChild(SecurityUtils.createElement('p', { className: 'font-bold text-lg' }, [String(summary.totalGas)]));
+        gridDiv.appendChild(gasDiv);
+        
+        // Add status columns based on current tab
+        if (currentDeliveryTab === 'planned') {
+            // For planned tab: show pending, assigned, and in_progress
+            const pendingDiv = document.createElement('div');
+            pendingDiv.appendChild(SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['待處理']));
+            pendingDiv.appendChild(SecurityUtils.createElement('p', { className: 'font-bold text-yellow-600 text-lg' }, [String(summary.byStatus.pending)]));
+            gridDiv.appendChild(pendingDiv);
+            
+            const assignedDiv = document.createElement('div');
+            assignedDiv.appendChild(SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['已指派']));
+            assignedDiv.appendChild(SecurityUtils.createElement('p', { className: 'font-bold text-blue-600 text-lg' }, [String(summary.byStatus.assigned)]));
+            gridDiv.appendChild(assignedDiv);
+            
+            const inProgressDiv = document.createElement('div');
+            inProgressDiv.appendChild(SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['配送中']));
+            inProgressDiv.appendChild(SecurityUtils.createElement('p', { className: 'font-bold text-purple-600 text-lg' }, [String(summary.byStatus.in_progress)]));
+            gridDiv.appendChild(inProgressDiv);
+        } else {
+            // For history tab: show completed and cancelled
+            const completedDiv = document.createElement('div');
+            completedDiv.appendChild(SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['已完成']));
+            completedDiv.appendChild(SecurityUtils.createElement('p', { className: 'font-bold text-green-600 text-lg' }, [String(summary.byStatus.completed)]));
+            gridDiv.appendChild(completedDiv);
+            
+            const cancelledDiv = document.createElement('div');
+            cancelledDiv.appendChild(SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['已取消']));
+            cancelledDiv.appendChild(SecurityUtils.createElement('p', { className: 'font-bold text-red-600 text-lg' }, [String(summary.byStatus.cancelled)]));
+            gridDiv.appendChild(cancelledDiv);
+        }
+        
+        mainDiv.appendChild(gridDiv);
+        summaryContainer.appendChild(mainDiv);
     }
 }
 
@@ -1054,29 +1410,44 @@ function capitalize(str) {
 }
 
 function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `fixed top-4 right-4 px-6 py-3 rounded shadow-lg text-white z-50 ${
-        type === 'success' ? 'bg-green-600' : 
-        type === 'error' ? 'bg-red-600' : 
-        'bg-blue-600'
-    }`;
-    notification.innerHTML = `
-        <div class="flex items-center">
-            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} mr-2"></i>
-            ${message}
-        </div>
-    `;
+    const notificationClasses = {
+        'success': window.APP_CONSTANTS?.CSS_CLASSES?.NOTIFICATION_SUCCESS || 'bg-green-600',
+        'error': window.APP_CONSTANTS?.CSS_CLASSES?.NOTIFICATION_ERROR || 'bg-red-600',
+        'info': window.APP_CONSTANTS?.CSS_CLASSES?.NOTIFICATION_INFO || 'bg-blue-600'
+    };
     
+    const icons = {
+        'success': window.APP_CONSTANTS?.ICONS?.SUCCESS || 'fas fa-check-circle',
+        'error': window.APP_CONSTANTS?.ICONS?.ERROR || 'fas fa-exclamation-circle',
+        'info': window.APP_CONSTANTS?.ICONS?.INFO || 'fas fa-info-circle'
+    };
+    
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 px-6 py-3 rounded shadow-lg text-white z-50 ${notificationClasses[type] || notificationClasses.info}`;
+    
+    const iconElement = document.createElement('i');
+    iconElement.className = `${icons[type] || icons.info} mr-2`;
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'flex items-center';
+    messageDiv.appendChild(iconElement);
+    messageDiv.appendChild(document.createTextNode(message));
+    
+    notification.appendChild(messageDiv);
     document.body.appendChild(notification);
     
     // Fade in
-    setTimeout(() => notification.classList.add('opacity-100'), 10);
+    const fadeInDelay = window.APP_CONFIG?.UI?.ANIMATION?.FAST || 10;
+    setTimeout(() => notification.classList.add('opacity-100'), fadeInDelay);
     
-    // Remove after 3 seconds
+    // Remove after configured duration
+    const duration = window.APP_CONFIG?.UI?.NOTIFICATION?.DURATION || 3000;
+    const fadeOutDuration = window.APP_CONFIG?.UI?.NOTIFICATION?.FADE_DURATION || 300;
+    
     setTimeout(() => {
         notification.classList.add('opacity-0');
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
+        setTimeout(() => notification.remove(), fadeOutDuration);
+    }, duration);
 }
 
 // Enhanced client functions
@@ -1371,7 +1742,7 @@ async function toggleClientStatus(clientCode, currentStatus) {
     if (!confirm(`確定要${currentStatus ? '停用' : '啟用'}此客戶嗎？`)) return;
     
     try {
-        const response = await fetch(`${API_BASE}/clients/by-code/${clientCode}`, {
+        const response = await secureFetch(`${API_BASE}/clients/by-code/${clientCode}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ is_active: !currentStatus })
@@ -1513,19 +1884,59 @@ async function editClient(clientCode) {
         
         modal.querySelector('#confirm-btn').addEventListener('click', async () => {
             const form = modal.querySelector('#edit-client-form');
-            const formData = new FormData(form);
-            const updateData = {};
             
+            // Clear previous errors
+            ValidationUtils.clearFormErrors(form);
+            
+            const formData = new FormData(form);
+            
+            // Define validation rules (client_code is readonly so not validated)
+            const validationRules = {
+                name: { required: true, type: 'name', options: { minLength: 2, maxLength: 100 } },
+                invoice_title: { required: false, type: 'name', options: { minLength: 2, maxLength: 100 } },
+                tax_id: { required: false, type: 'custom', validator: (value) => {
+                    if (!value) return { isValid: true, message: '' };
+                    if (!/^\d{8}$/.test(value)) {
+                        return { isValid: false, message: '統一編號必須是8位數字' };
+                    }
+                    return { isValid: true, message: '' };
+                }},
+                contact_person: { required: false, type: 'name', options: { minLength: 2, maxLength: 50 } },
+                address: { required: true, type: 'address' },
+                district: { required: false, type: 'name', options: { minLength: 2, maxLength: 50 } }
+            };
+            
+            // Get form data
+            const rawData = {};
             for (let [key, value] of formData.entries()) {
-                if (key === 'is_active') {
-                    updateData[key] = value === 'true';
-                } else {
-                    updateData[key] = value;
-                }
+                rawData[key] = value;
             }
             
+            // Validate form data
+            const validationResult = ValidationUtils.validateForm(rawData, validationRules);
+            
+            if (!validationResult.isValid) {
+                ValidationUtils.displayFormErrors(form, validationResult.errors);
+                showNotification('請修正表單錯誤', 'error');
+                return;
+            }
+            
+            // Sanitize data
+            const sanitizationSchema = {
+                client_code: { type: 'clientCode' },
+                name: { type: 'string', options: { maxLength: 100 } },
+                invoice_title: { type: 'string', options: { maxLength: 100 } },
+                tax_id: { type: 'string', options: { maxLength: 8 } },
+                contact_person: { type: 'string', options: { maxLength: 50 } },
+                address: { type: 'string', options: { maxLength: 200 } },
+                district: { type: 'string', options: { maxLength: 50 } },
+                is_active: { type: 'boolean' }
+            };
+            
+            const updateData = SanitizationUtils.sanitizeFormData(rawData, sanitizationSchema);
+            
             try {
-                const updateResponse = await fetch(`${API_BASE}/clients/by-code/${clientCode}`, {
+                const updateResponse = await secureFetch(`${API_BASE}/clients/by-code/${clientCode}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(updateData)
@@ -1536,10 +1947,11 @@ async function editClient(clientCode) {
                     closeModal(modal);
                     loadClients();
                 } else {
-                    throw new Error('更新失敗');
+                    const error = await updateResponse.json();
+                    showNotification(error.detail || '更新失敗', 'error');
                 }
             } catch (error) {
-                showNotification('更新客戶資料失敗', 'error');
+                showNotification('更新客戶資料失敗: ' + error.message, 'error');
             }
         });
         
@@ -1594,7 +2006,7 @@ async function editDriver(driverId) {
             }
             
             try {
-                const updateResponse = await fetch(`${API_BASE}/drivers/${driverId}`, {
+                const updateResponse = await secureFetch(`${API_BASE}/drivers/${driverId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(updateData)
@@ -1668,7 +2080,7 @@ async function editVehicle(vehicleId) {
             }
             
             try {
-                const updateResponse = await fetch(`${API_BASE}/vehicles/${vehicleId}`, {
+                const updateResponse = await secureFetch(`${API_BASE}/vehicles/${vehicleId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(updateData)
@@ -1826,7 +2238,7 @@ function setupAddClientFormHandler() {
             const data = Object.fromEntries(formData);
             
             try {
-                const response = await fetch('/api/clients', {
+                const response = await secureFetch('/api/clients', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
@@ -1883,7 +2295,7 @@ async function updateDeliveryStatus(deliveryId, currentStatus) {
     
     if (confirm(`確定要將狀態更新為「${getStatusText(nextStatus)}」嗎？`)) {
         try {
-            const response = await fetch(`${API_BASE}/deliveries/${deliveryId}`, {
+            const response = await secureFetch(`${API_BASE}/deliveries/${deliveryId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: nextStatus.toUpperCase() })
@@ -1959,7 +2371,7 @@ async function assignDelivery(deliveryId) {
         const formData = new FormData(form);
         
         try {
-            const response = await fetch(`${API_BASE}/deliveries/${deliveryId}/assign`, {
+            const response = await secureFetch(`${API_BASE}/deliveries/${deliveryId}/assign`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1994,19 +2406,71 @@ function setupFormHandlers() {
     if (addClientForm) {
         addClientForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            
+            // Clear previous errors
+            ValidationUtils.clearFormErrors(addClientForm);
+            
             const formData = new FormData(addClientForm);
-            const clientData = {
+            
+            // Define validation rules
+            const validationRules = {
+                name: { required: true, type: 'name', options: { minLength: 2, maxLength: 100 } },
+                client_code: { required: true, type: 'clientCode' },
+                invoice_title: { required: true, type: 'name', options: { minLength: 2, maxLength: 100 } },
+                tax_id: { required: false, type: 'custom', validator: (value) => {
+                    if (!value) return { isValid: true, message: '' };
+                    // Taiwan tax ID is 8 digits
+                    if (!/^\d{8}$/.test(value)) {
+                        return { isValid: false, message: '統一編號必須是8位數字' };
+                    }
+                    return { isValid: true, message: '' };
+                }},
+                contact_person: { required: false, type: 'name', options: { minLength: 2, maxLength: 50 } },
+                address: { required: true, type: 'address' },
+                district: { required: false, type: 'name', options: { minLength: 2, maxLength: 50 } }
+            };
+            
+            // Get form data
+            const rawData = {
                 name: formData.get('name'),
+                client_code: formData.get('client_code'),
                 invoice_title: formData.get('invoice_title'),
                 tax_id: formData.get('tax_id'),
                 contact_person: formData.get('contact_person'),
                 address: formData.get('address'),
-                district: formData.get('district'),
+                district: formData.get('district')
+            };
+            
+            // Validate form data
+            const validationResult = ValidationUtils.validateForm(rawData, validationRules);
+            
+            if (!validationResult.isValid) {
+                ValidationUtils.displayFormErrors(addClientForm, validationResult.errors);
+                showNotification('請修正表單錯誤', 'error');
+                return;
+            }
+            
+            // Sanitize data
+            const sanitizationSchema = {
+                name: { type: 'string', options: { maxLength: 100 } },
+                client_code: { type: 'clientCode' },
+                invoice_title: { type: 'string', options: { maxLength: 100 } },
+                tax_id: { type: 'string', options: { maxLength: 8 } },
+                contact_person: { type: 'string', options: { maxLength: 50 } },
+                address: { type: 'string', options: { maxLength: 200 } },
+                district: { type: 'string', options: { maxLength: 50 } }
+            };
+            
+            const sanitizedData = SanitizationUtils.sanitizeFormData(rawData, sanitizationSchema);
+            
+            // Add default values
+            const clientData = {
+                ...sanitizedData,
                 is_active: true
             };
             
             try {
-                const response = await fetch(`${API_BASE}/clients`, {
+                const response = await secureFetch(`${API_BASE}/clients`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(clientData)
@@ -2017,10 +2481,11 @@ function setupFormHandlers() {
                     addClientForm.reset();
                     loadClients();
                 } else {
-                    throw new Error('新增失敗');
+                    const error = await response.json();
+                    showNotification(error.detail || '新增失敗', 'error');
                 }
             } catch (error) {
-                showNotification('新增客戶失敗', 'error');
+                showNotification('新增客戶失敗: ' + error.message, 'error');
             }
         });
     }
@@ -2030,24 +2495,94 @@ function setupFormHandlers() {
     if (addDeliveryForm) {
         addDeliveryForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            
+            // Clear previous errors
+            ValidationUtils.clearFormErrors(addDeliveryForm);
+            
             const formData = new FormData(addDeliveryForm);
-            const deliveryData = {
-                client_id: parseInt(formData.get('client_id')),
-                scheduled_date: formData.get('scheduled_date'),
-                scheduled_time_slot: formData.get('scheduled_time_slot'),
-                gas_quantity: parseInt(formData.get('gas_quantity')),
-                delivery_address: formData.get('delivery_address'),
-                delivery_district: formData.get('delivery_district'),
-                unit_price: parseFloat(formData.get('unit_price') || 650),
-                delivery_fee: parseFloat(formData.get('delivery_fee') || 0),
-                payment_method: formData.get('payment_method') || 'cash',
-                requires_empty_cylinder_return: formData.get('requires_empty_cylinder_return') === 'on',
-                empty_cylinders_to_return: parseInt(formData.get('empty_cylinders_to_return') || 0),
-                notes: formData.get('notes')
+            
+            // Define validation rules
+            const validationRules = {
+                client_id: { required: true, type: 'custom', validator: (value) => {
+                    if (!value || value === '') {
+                        return { isValid: false, message: '請選擇客戶' };
+                    }
+                    const num = parseInt(value);
+                    if (isNaN(num) || num <= 0) {
+                        return { isValid: false, message: '無效的客戶選擇' };
+                    }
+                    return { isValid: true, message: '' };
+                }},
+                scheduled_date: { required: true, type: 'date', options: { allowPast: false } },
+                scheduled_time_slot: { required: false, type: 'custom', validator: (value) => {
+                    const validSlots = ['上午 9:00-12:00', '下午 12:00-15:00', '下午 15:00-18:00', '晚上 18:00-21:00'];
+                    if (value && !validSlots.includes(value)) {
+                        return { isValid: false, message: '請選擇有效的時段' };
+                    }
+                    return { isValid: true, message: '' };
+                }},
+                gas_quantity: { required: true, type: 'quantity', options: { min: 1, max: 100 } },
+                delivery_address: { required: true, type: 'address' },
+                delivery_district: { required: false, type: 'name', options: { minLength: 2, maxLength: 50 } },
+                unit_price: { required: true, type: 'amount', options: { min: 0, max: 10000 } },
+                delivery_fee: { required: false, type: 'amount', options: { min: 0, max: 1000, allowZero: true } },
+                payment_method: { required: true, type: 'custom', validator: (value) => {
+                    const validMethods = ['cash', 'transfer', 'monthly_billing'];
+                    if (!validMethods.includes(value)) {
+                        return { isValid: false, message: '請選擇有效的付款方式' };
+                    }
+                    return { isValid: true, message: '' };
+                }},
+                empty_cylinders_to_return: { required: false, type: 'quantity', options: { min: 0, max: 100 } }
             };
             
+            // Get form data
+            const rawData = {
+                client_id: formData.get('client_id'),
+                scheduled_date: formData.get('scheduled_date'),
+                scheduled_time_slot: formData.get('scheduled_time_slot'),
+                gas_quantity: formData.get('gas_quantity'),
+                delivery_address: formData.get('delivery_address'),
+                delivery_district: formData.get('delivery_district'),
+                unit_price: formData.get('unit_price'),
+                delivery_fee: formData.get('delivery_fee'),
+                payment_method: formData.get('payment_method'),
+                empty_cylinders_to_return: formData.get('empty_cylinders_to_return')
+            };
+            
+            // Validate form data
+            const validationResult = ValidationUtils.validateForm(rawData, validationRules);
+            
+            if (!validationResult.isValid) {
+                ValidationUtils.displayFormErrors(addDeliveryForm, validationResult.errors);
+                showNotification('請修正表單錯誤', 'error');
+                return;
+            }
+            
+            // Sanitize data
+            const sanitizationSchema = {
+                client_id: { type: 'number', options: { type: 'integer', min: 1 } },
+                scheduled_date: { type: 'date' },
+                scheduled_time_slot: { type: 'string', options: { maxLength: 50 } },
+                gas_quantity: { type: 'number', options: { type: 'integer', min: 1, max: 100 } },
+                delivery_address: { type: 'string', options: { maxLength: 200 } },
+                delivery_district: { type: 'string', options: { maxLength: 50 } },
+                unit_price: { type: 'number', options: { type: 'float', min: 0, max: 10000, decimals: 2 } },
+                delivery_fee: { type: 'number', options: { type: 'float', min: 0, max: 1000, decimals: 2, defaultValue: 0 } },
+                payment_method: { type: 'string', options: { maxLength: 20 }, defaultValue: 'cash' },
+                requires_empty_cylinder_return: { type: 'boolean' },
+                empty_cylinders_to_return: { type: 'number', options: { type: 'integer', min: 0, max: 100, defaultValue: 0 } },
+                notes: { type: 'string', options: { maxLength: 500 } }
+            };
+            
+            // Add checkbox and notes handling
+            rawData.requires_empty_cylinder_return = formData.get('requires_empty_cylinder_return') === 'on';
+            rawData.notes = formData.get('notes');
+            
+            const deliveryData = SanitizationUtils.sanitizeFormData(rawData, sanitizationSchema);
+            
             try {
-                const response = await fetch(`${API_BASE}/deliveries`, {
+                const response = await secureFetch(`${API_BASE}/deliveries`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(deliveryData)
@@ -2059,10 +2594,11 @@ function setupFormHandlers() {
                     addDeliveryForm.reset();
                     loadDeliveries();
                 } else {
-                    throw new Error('新增失敗');
+                    const error = await response.json();
+                    showNotification(error.detail || '新增失敗', 'error');
                 }
             } catch (error) {
-                showNotification('新增配送單失敗', 'error');
+                showNotification('新增配送單失敗: ' + error.message, 'error');
             }
         });
     }
@@ -2072,25 +2608,101 @@ function setupFormHandlers() {
     if (addDriverForm) {
         addDriverForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            
+            // Clear previous errors
+            ValidationUtils.clearFormErrors(addDriverForm);
+            
             const formData = new FormData(addDriverForm);
-            const driverData = {
-                name: formData.get('name'),
-                employee_id: formData.get('employee_id'),
-                phone: formData.get('phone'),
-                id_number: formData.get('id_number'),
-                address: formData.get('address'),
-                emergency_contact: formData.get('emergency_contact'),
-                emergency_phone: formData.get('emergency_phone'),
-                license_number: formData.get('license_number'),
-                license_type: formData.get('license_type'),
-                license_expiry_date: formData.get('license_expiry_date'),
-                hire_date: formData.get('hire_date'),
-                base_salary: parseFloat(formData.get('base_salary') || 0),
-                commission_rate: parseFloat(formData.get('commission_rate') || 0)
+            
+            // Define validation rules
+            const validationRules = {
+                name: { required: true, type: 'name', options: { minLength: 2, maxLength: 50 } },
+                employee_id: { required: true, type: 'custom', validator: (value) => {
+                    if (!value || value.trim() === '') {
+                        return { isValid: false, message: '員工編號不能為空' };
+                    }
+                    if (value.length < 3 || value.length > 20) {
+                        return { isValid: false, message: '員工編號長度必須在3-20個字符之間' };
+                    }
+                    if (!/^[A-Z0-9\-]+$/i.test(value)) {
+                        return { isValid: false, message: '員工編號只能包含字母、數字和連字符' };
+                    }
+                    return { isValid: true, message: '' };
+                }},
+                phone: { required: true, type: 'phone' },
+                id_number: { required: true, type: 'custom', validator: (value) => {
+                    // Taiwan ID number validation
+                    if (!value || value.trim() === '') {
+                        return { isValid: false, message: '身分證字號不能為空' };
+                    }
+                    const idPattern = /^[A-Z][12]\d{8}$/;
+                    if (!idPattern.test(value)) {
+                        return { isValid: false, message: '請輸入有效的台灣身分證字號' };
+                    }
+                    // TODO: Add checksum validation for Taiwan ID
+                    return { isValid: true, message: '' };
+                }},
+                address: { required: true, type: 'address' },
+                emergency_contact: { required: true, type: 'name', options: { minLength: 2, maxLength: 50 } },
+                emergency_phone: { required: true, type: 'phone' },
+                license_number: { required: true, type: 'custom', validator: (value) => {
+                    if (!value || value.trim() === '') {
+                        return { isValid: false, message: '駕照號碼不能為空' };
+                    }
+                    if (value.length < 5 || value.length > 20) {
+                        return { isValid: false, message: '駕照號碼長度無效' };
+                    }
+                    return { isValid: true, message: '' };
+                }},
+                license_type: { required: true, type: 'custom', validator: (value) => {
+                    const validTypes = ['職業大貨車', '職業小型車', '普通大貨車', '普通小型車'];
+                    if (!value || !validTypes.includes(value)) {
+                        return { isValid: false, message: '請選擇有效的駕照類型' };
+                    }
+                    return { isValid: true, message: '' };
+                }},
+                license_expiry_date: { required: true, type: 'date', options: { allowPast: false } },
+                hire_date: { required: true, type: 'date' },
+                base_salary: { required: false, type: 'amount', options: { min: 0, max: 999999 } },
+                commission_rate: { required: false, type: 'amount', options: { min: 0, max: 100 } }
             };
             
+            // Get form data
+            const rawData = {};
+            for (const field of Object.keys(validationRules)) {
+                rawData[field] = formData.get(field);
+            }
+            
+            // Validate form data
+            const validationResult = ValidationUtils.validateForm(rawData, validationRules);
+            
+            if (!validationResult.isValid) {
+                ValidationUtils.displayFormErrors(addDriverForm, validationResult.errors);
+                showNotification('請修正表單錯誤', 'error');
+                return;
+            }
+            
+            // Sanitize data
+            const sanitizationSchema = {
+                name: { type: 'string', options: { maxLength: 50 } },
+                employee_id: { type: 'string', options: { maxLength: 20 } },
+                phone: { type: 'phone' },
+                id_number: { type: 'string', options: { maxLength: 10 } },
+                address: { type: 'string', options: { maxLength: 200 } },
+                emergency_contact: { type: 'string', options: { maxLength: 50 } },
+                emergency_phone: { type: 'phone' },
+                license_number: { type: 'string', options: { maxLength: 20 } },
+                license_type: { type: 'string', options: { maxLength: 20 } },
+                license_expiry_date: { type: 'date' },
+                hire_date: { type: 'date' },
+                base_salary: { type: 'number', options: { type: 'float', min: 0, max: 999999, decimals: 2, defaultValue: 0 } },
+                commission_rate: { type: 'number', options: { type: 'float', min: 0, max: 100, decimals: 2, defaultValue: 0 } }
+            };
+            
+            const driverData = SanitizationUtils.sanitizeFormData(rawData, sanitizationSchema);
+            
             try {
-                const response = await fetch(`${API_BASE}/drivers`, {
+                const response = await secureFetch(`${API_BASE}/drivers`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(driverData)
@@ -2116,20 +2728,77 @@ function setupFormHandlers() {
     if (addVehicleForm) {
         addVehicleForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            
+            // Clear previous errors
+            ValidationUtils.clearFormErrors(addVehicleForm);
+            
             const formData = new FormData(addVehicleForm);
-            const vehicleData = {
-                plate_number: formData.get('plate_number'),
-                vehicle_type: formData.get('vehicle_type'),
-                brand: formData.get('brand'),
-                model: formData.get('model'),
-                year: parseInt(formData.get('year')),
-                fuel_type: formData.get('fuel_type'),
-                max_load_kg: parseFloat(formData.get('max_load_kg') || 0),
-                max_cylinders: parseInt(formData.get('max_cylinders') || 0)
+            
+            // Define validation rules
+            const validationRules = {
+                plate_number: { required: true, type: 'licensePlate' },
+                vehicle_type: { required: true, type: 'custom', validator: (value) => {
+                    const validTypes = ['truck', 'van', 'motorcycle'];
+                    if (!value || !validTypes.includes(value)) {
+                        return { isValid: false, message: '請選擇有效的車型' };
+                    }
+                    return { isValid: true, message: '' };
+                }},
+                brand: { required: true, type: 'name', options: { minLength: 2, maxLength: 50 } },
+                model: { required: true, type: 'name', options: { minLength: 1, maxLength: 50, allowNumbers: true } },
+                year: { required: true, type: 'custom', validator: (value) => {
+                    const year = parseInt(value);
+                    if (isNaN(year)) {
+                        return { isValid: false, message: '請輸入有效的年份' };
+                    }
+                    const currentYear = new Date().getFullYear();
+                    if (year < 1990 || year > currentYear + 1) {
+                        return { isValid: false, message: `年份必須在1990到${currentYear + 1}之間` };
+                    }
+                    return { isValid: true, message: '' };
+                }},
+                fuel_type: { required: true, type: 'custom', validator: (value) => {
+                    const validTypes = ['gasoline', 'diesel', 'electric', 'hybrid'];
+                    if (!value || !validTypes.includes(value)) {
+                        return { isValid: false, message: '請選擇有效的燃料類型' };
+                    }
+                    return { isValid: true, message: '' };
+                }},
+                max_load_kg: { required: true, type: 'amount', options: { min: 0, max: 50000 } },
+                max_cylinders: { required: true, type: 'quantity', options: { min: 0, max: 1000 } }
             };
             
+            // Get form data
+            const rawData = {};
+            for (const field of Object.keys(validationRules)) {
+                rawData[field] = formData.get(field);
+            }
+            
+            // Validate form data
+            const validationResult = ValidationUtils.validateForm(rawData, validationRules);
+            
+            if (!validationResult.isValid) {
+                ValidationUtils.displayFormErrors(addVehicleForm, validationResult.errors);
+                showNotification('請修正表單錯誤', 'error');
+                return;
+            }
+            
+            // Sanitize data
+            const sanitizationSchema = {
+                plate_number: { type: 'licensePlate' },
+                vehicle_type: { type: 'string', options: { maxLength: 20 } },
+                brand: { type: 'string', options: { maxLength: 50 } },
+                model: { type: 'string', options: { maxLength: 50 } },
+                year: { type: 'number', options: { type: 'integer', min: 1990, max: new Date().getFullYear() + 1 } },
+                fuel_type: { type: 'string', options: { maxLength: 20 } },
+                max_load_kg: { type: 'number', options: { type: 'float', min: 0, max: 50000, decimals: 2 } },
+                max_cylinders: { type: 'number', options: { type: 'integer', min: 0, max: 1000 } }
+            };
+            
+            const vehicleData = SanitizationUtils.sanitizeFormData(rawData, sanitizationSchema);
+            
             try {
-                const response = await fetch(`${API_BASE}/vehicles`, {
+                const response = await secureFetch(`${API_BASE}/vehicles`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(vehicleData)

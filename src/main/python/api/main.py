@@ -10,6 +10,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from core.database import db_manager
 from api.routers import clients_router, deliveries_router, drivers_router, vehicles_router, dashboard_router, routes_router
 from api.routers.scheduling import router as scheduling_router
+from api.security import CSRFMiddleware
 
 # 應用程式生命週期管理
 @asynccontextmanager
@@ -36,6 +37,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# CSRF Protection Middleware
+app.add_middleware(CSRFMiddleware)
 
 # 路由註冊 - 加上 /api 前綴
 app.include_router(clients_router, prefix="/api")
