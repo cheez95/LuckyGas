@@ -426,6 +426,9 @@
                     <button onclick="showRoutePlanModal()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
                         <i class="fas fa-magic mr-2"></i>自動規劃
                     </button>
+                    <button onclick="showSchedulingModal()" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition">
+                        <i class="fas fa-calendar-alt mr-2"></i>進階排程
+                    </button>
                     <button onclick="showAddRouteModal()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">
                         <i class="fas fa-plus mr-2"></i>手動建立
                     </button>
@@ -1385,6 +1388,163 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+    
+    <!-- Advanced Scheduling Modal -->
+    <div id="schedulingModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">進階排程系統</h3>
+                <button onclick="closeModal('schedulingModal')" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <form id="scheduling-form">
+                <!-- Date Selection Section -->
+                <div class="mb-6">
+                    <h4 class="font-semibold mb-3">排程日期範圍</h4>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">排程類型</label>
+                            <select name="schedule_type" id="schedule-type" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500" onchange="toggleDateRangeInputs()">
+                                <option value="single">單日排程</option>
+                                <option value="range">日期範圍排程</option>
+                            </select>
+                        </div>
+                        <div id="single-date-input">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">排程日期</label>
+                            <input type="date" name="schedule_date" id="schedule-date" required class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div id="date-range-inputs" class="hidden col-span-2">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">開始日期</label>
+                                    <input type="date" name="start_date" id="start-date" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">結束日期</label>
+                                    <input type="date" name="end_date" id="end-date" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Algorithm Selection -->
+                <div class="mb-6">
+                    <h4 class="font-semibold mb-3">演算法設定</h4>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">排程演算法</label>
+                            <select name="algorithm" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500" onchange="updateAlgorithmDescription()">
+                                <option value="greedy">貪婪演算法 (快速)</option>
+                                <option value="genetic">基因演算法 (最佳化)</option>
+                                <option value="simulated_annealing">模擬退火 (平衡)</option>
+                            </select>
+                            <p id="algorithm-description" class="text-sm text-gray-600 mt-1">快速找到可行解，適合日常排程</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">最大計算時間 (秒)</label>
+                            <input type="number" name="time_limit_seconds" value="30" min="5" max="300" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Optimization Objectives -->
+                <div class="mb-6">
+                    <h4 class="font-semibold mb-3">優化目標</h4>
+                    <div class="space-y-2">
+                        <label class="flex items-center">
+                            <input type="checkbox" name="objectives" value="minimize_distance" checked class="mr-2">
+                            <span>最小化總行駛距離</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="objectives" value="maximize_time_compliance" checked class="mr-2">
+                            <span>最大化時間窗口符合度</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="objectives" value="balance_workload" class="mr-2">
+                            <span>平衡司機工作量</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="objectives" value="minimize_overtime" class="mr-2">
+                            <span>最小化加班時間</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="objectives" value="maximize_utilization" class="mr-2">
+                            <span>最大化車輛使用率</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Constraints -->
+                <div class="mb-6">
+                    <h4 class="font-semibold mb-3">約束條件</h4>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">最大配送/路線</label>
+                            <input type="number" name="max_deliveries_per_route" value="20" min="5" max="50" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">最小配送/路線</label>
+                            <input type="number" name="min_deliveries_per_route" value="5" min="1" max="20" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">平均行駛速度 (km/h)</label>
+                            <input type="number" name="travel_speed_kmh" value="30" min="10" max="60" class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500">
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <label class="flex items-center">
+                            <input type="checkbox" name="allow_overtime" class="mr-2">
+                            <span>允許加班</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Resource Selection -->
+                <div class="mb-6">
+                    <h4 class="font-semibold mb-3">資源選擇（選填）</h4>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">指定司機</label>
+                            <select name="driver_ids" multiple class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500" size="5">
+                                <!-- Options will be populated dynamically -->
+                            </select>
+                            <p class="text-sm text-gray-600 mt-1">按住 Ctrl/Cmd 多選，留空表示使用所有可用司機</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">指定車輛</label>
+                            <select name="vehicle_ids" multiple class="w-full px-3 py-2 border rounded focus:outline-none focus:border-blue-500" size="5">
+                                <!-- Options will be populated dynamically -->
+                            </select>
+                            <p class="text-sm text-gray-600 mt-1">按住 Ctrl/Cmd 多選，留空表示使用所有可用車輛</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex justify-end gap-2">
+                    <button type="button" onclick="closeModal('schedulingModal')" class="px-4 py-2 border rounded hover:bg-gray-100 transition">
+                        取消
+                    </button>
+                    <button type="button" onclick="previewSchedule()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">
+                        <i class="fas fa-eye mr-2"></i>預覽排程
+                    </button>
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+                        <i class="fas fa-magic mr-2"></i>生成排程
+                    </button>
+                </div>
+            </form>
+            
+            <!-- Results Section (Initially Hidden) -->
+            <div id="scheduling-results" class="hidden mt-6 border-t pt-6">
+                <h4 class="font-semibold mb-3">排程結果</h4>
+                <div id="scheduling-results-content">
+                    <!-- Results will be displayed here -->
+                </div>
+            </div>
         </div>
     </div>
     

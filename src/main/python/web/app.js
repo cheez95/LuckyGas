@@ -3530,3 +3530,519 @@ window.filterRoutes = filterRoutes;
 window.loadRoutes = loadRoutes;
 window.addClientToRoute = addClientToRoute;
 window.removeClientFromRoute = removeClientFromRoute;
+
+// Scheduling System Functions
+async function showSchedulingModal() {
+    const modal = document.getElementById('schedulingModal');
+    if (!modal) return;
+    
+    // Reset form
+    document.getElementById('scheduling-form').reset();
+    document.getElementById('scheduling-results').classList.add('hidden');
+    
+    // Set default date to tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    document.getElementById('schedule-date').value = tomorrow.toISOString().split('T')[0];
+    
+    // Load available drivers and vehicles
+    await loadSchedulingResources();
+    
+    // Show modal
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+async function loadSchedulingResources() {
+    try {
+        // Load available drivers
+        const driversResponse = await fetch(`${API_BASE}/drivers?is_available=true`);
+        const drivers = await driversResponse.json();
+        
+        const driverSelect = document.querySelector('select[name="driver_ids"]');
+        driverSelect.innerHTML = '';
+        
+        if (drivers.items) {
+            drivers.items.forEach(driver => {
+                const option = document.createElement('option');
+                option.value = driver.id;
+                option.textContent = `${driver.name} (${driver.employee_id})`;
+                driverSelect.appendChild(option);
+            });
+        }
+        
+        // Load available vehicles
+        const vehiclesResponse = await fetch(`${API_BASE}/vehicles?is_active=true`);
+        const vehicles = await vehiclesResponse.json();
+        
+        const vehicleSelect = document.querySelector('select[name="vehicle_ids"]');
+        vehicleSelect.innerHTML = '';
+        
+        if (vehicles.items) {
+            vehicles.items.forEach(vehicle => {
+                const option = document.createElement('option');
+                option.value = vehicle.id;
+                option.textContent = `${vehicle.plate_number} - ${vehicle.vehicle_type}`;
+                vehicleSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Failed to load resources:', error);
+        showNotification('載入資源失敗', 'error');
+    }
+}
+
+function toggleDateRangeInputs() {
+    const scheduleType = document.getElementById('schedule-type').value;
+    const singleDateInput = document.getElementById('single-date-input');
+    const dateRangeInputs = document.getElementById('date-range-inputs');
+    
+    if (scheduleType === 'single') {
+        singleDateInput.classList.remove('hidden');
+        dateRangeInputs.classList.add('hidden');
+        document.getElementById('schedule-date').required = true;
+        document.getElementById('start-date').required = false;
+        document.getElementById('end-date').required = false;
+    } else {
+        singleDateInput.classList.add('hidden');
+        dateRangeInputs.classList.remove('hidden');
+        document.getElementById('schedule-date').required = false;
+        document.getElementById('start-date').required = true;
+        document.getElementById('end-date').required = true;
+    }
+}
+
+function updateAlgorithmDescription() {
+    const algorithm = document.querySelector('select[name="algorithm"]').value;
+    const description = document.getElementById('algorithm-description');
+    
+    const descriptions = {
+        'greedy': '快速找到可行解，適合日常排程',
+        'genetic': '透過演化找到最佳解，需要較長計算時間',
+        'simulated_annealing': '平衡速度與品質，適合中等規模問題'
+    };
+    
+    description.textContent = descriptions[algorithm] || '';
+}
+
+async function previewSchedule() {
+    const formData = new FormData(document.getElementById('scheduling-form'));
+    const scheduleType = formData.get('schedule_type');
+    
+    let dates = [];
+    if (scheduleType === 'single') {
+        dates.push(formData.get('schedule_date'));
+    } else {
+        const startDate = new Date(formData.get('start_date'));
+        const endDate = new Date(formData.get('end_date'));
+        
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+            dates.push(new Date(d).toISOString().split('T')[0]);
+        }
+    }
+    
+    const resultsDiv = document.getElementById('scheduling-results-content');
+    resultsDiv.innerHTML = `
+        <div class="text-center py-4">
+            <i class="fas fa-spinner fa-spin text-2xl text-blue-600"></i>
+            <p class="mt-2">正在預覽排程...</p>
+        </div>
+    `;
+    
+    document.getElementById('scheduling-results').classList.remove('hidden');
+    
+    // Show preview information
+    setTimeout(() => {
+        resultsDiv.innerHTML = `
+            <div class="bg-blue-50 border border-blue-200 rounded p-4">
+                <h5 class="font-semibold mb-2">預覽資訊</h5>
+                <p>將為以下日期生成排程：</p>
+                <ul class="list-disc list-inside mt-2">
+                    ${dates.map(date => `<li>${formatDate(date)}</li>`).join('')}
+                </ul>
+                <p class="mt-2">總共 ${dates.length} 天的排程</p>
+            </div>
+        `;
+    }, 1000);
+}
+
+// Handle form submission
+document.addEventListener('DOMContentLoaded', () => {
+    const schedulingForm = document.getElementById('scheduling-form');
+    if (schedulingForm) {
+        schedulingForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const scheduleType = formData.get('schedule_type');
+    
+    // Get selected objectives
+    const objectives = [];
+    formData.getAll('objectives').forEach(obj => objectives.push(obj));
+    
+    if (objectives.length === 0) {
+        showNotification('請至少選擇一個優化目標', 'error');
+        return;
+    }
+    
+    // Get selected resources
+    const driverIds = Array.from(document.querySelector('select[name="driver_ids"]').selectedOptions)
+        .map(option => parseInt(option.value));
+    const vehicleIds = Array.from(document.querySelector('select[name="vehicle_ids"]').selectedOptions)
+        .map(option => parseInt(option.value));
+    
+    // Determine dates to schedule
+    let datesToSchedule = [];
+    if (scheduleType === 'single') {
+        datesToSchedule.push(formData.get('schedule_date'));
+    } else {
+        const startDate = new Date(formData.get('start_date'));
+        const endDate = new Date(formData.get('end_date'));
+        
+        if (endDate < startDate) {
+            showNotification('結束日期必須在開始日期之後', 'error');
+            return;
+        }
+        
+        // Limit to 30 days
+        const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+        if (daysDiff > 30) {
+            showNotification('日期範圍不能超過 30 天', 'error');
+            return;
+        }
+        
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+            datesToSchedule.push(new Date(d).toISOString().split('T')[0]);
+        }
+    }
+    
+    // Show progress
+    const resultsDiv = document.getElementById('scheduling-results-content');
+    resultsDiv.innerHTML = `
+        <div class="text-center py-4">
+            <i class="fas fa-spinner fa-spin text-2xl text-blue-600"></i>
+            <p class="mt-2">正在生成排程...</p>
+            <p class="text-sm text-gray-600">這可能需要幾秒鐘時間</p>
+        </div>
+    `;
+    document.getElementById('scheduling-results').classList.remove('hidden');
+    
+    // Process each date
+    const results = [];
+    const scheduleDataMap = new Map(); // Store schedule data for apply function
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (const scheduleDate of datesToSchedule) {
+        try {
+            const requestData = {
+                schedule_date: scheduleDate,
+                algorithm: formData.get('algorithm'),
+                optimization_objectives: objectives,
+                max_iterations: 1000,
+                time_limit_seconds: parseInt(formData.get('time_limit_seconds')),
+                allow_overtime: formData.get('allow_overtime') === 'on',
+                travel_speed_kmh: parseFloat(formData.get('travel_speed_kmh')),
+                max_deliveries_per_route: parseInt(formData.get('max_deliveries_per_route')),
+                min_deliveries_per_route: parseInt(formData.get('min_deliveries_per_route'))
+            };
+            
+            // Add optional filters
+            if (driverIds.length > 0) {
+                requestData.driver_ids = driverIds;
+            }
+            if (vehicleIds.length > 0) {
+                requestData.vehicle_ids = vehicleIds;
+            }
+            
+            const response = await fetch(`${API_BASE}/scheduling/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestData)
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok && result.success) {
+                successCount++;
+                // Store the full result for apply function
+                scheduleDataMap.set(scheduleDate, result);
+                results.push({
+                    date: scheduleDate,
+                    success: true,
+                    data: result
+                });
+            } else {
+                failCount++;
+                results.push({
+                    date: scheduleDate,
+                    success: false,
+                    error: result.detail || result.message || '排程失敗'
+                });
+            }
+        } catch (error) {
+            failCount++;
+            results.push({
+                date: scheduleDate,
+                success: false,
+                error: error.message
+            });
+        }
+    }
+    
+    // Store schedule data globally for apply function
+    window.schedulingResultsCache = scheduleDataMap;
+    
+    // Display results
+    displaySchedulingResults(results, successCount, failCount);
+        });
+    }
+});
+
+function displaySchedulingResults(results, successCount, failCount) {
+    const resultsDiv = document.getElementById('scheduling-results-content');
+    
+    let html = `
+        <div class="mb-4">
+            <div class="flex items-center justify-between">
+                <h5 class="font-semibold">排程完成</h5>
+                <div class="text-sm">
+                    <span class="text-green-600">成功: ${successCount}</span>
+                    ${failCount > 0 ? `<span class="text-red-600 ml-3">失敗: ${failCount}</span>` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Group results by success/failure
+    const successResults = results.filter(r => r.success);
+    const failResults = results.filter(r => !r.success);
+    
+    if (successResults.length > 0) {
+        html += `
+            <div class="mb-4">
+                <h6 class="font-medium mb-2 text-green-700">成功排程</h6>
+                <div class="space-y-2">
+        `;
+        
+        successResults.forEach(result => {
+            const data = result.data;
+            html += `
+                <div class="bg-green-50 border border-green-200 rounded p-3">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">${formatDate(result.date)}</p>
+                            <p class="text-sm text-gray-600 mt-1">
+                                ${data.scheduled_deliveries}/${data.total_deliveries} 配送已排程 | 
+                                ${data.total_routes} 條路線 | 
+                                總距離: ${data.total_distance.toFixed(1)} km
+                            </p>
+                            ${data.conflicts_count > 0 ? `
+                                <p class="text-sm text-orange-600 mt-1">
+                                    <i class="fas fa-exclamation-triangle mr-1"></i>
+                                    ${data.conflicts_count} 個衝突
+                                </p>
+                            ` : ''}
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="viewScheduleDetails('${result.date}')" class="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
+                                查看詳情
+                            </button>
+                            <button onclick="applySchedule('${result.date}')" class="text-sm bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">
+                                套用排程
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+    }
+    
+    if (failResults.length > 0) {
+        html += `
+            <div class="mb-4">
+                <h6 class="font-medium mb-2 text-red-700">失敗排程</h6>
+                <div class="space-y-2">
+        `;
+        
+        failResults.forEach(result => {
+            html += `
+                <div class="bg-red-50 border border-red-200 rounded p-3">
+                    <p class="font-medium">${formatDate(result.date)}</p>
+                    <p class="text-sm text-red-600 mt-1">${result.error}</p>
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+    }
+    
+    resultsDiv.innerHTML = html;
+}
+
+async function viewScheduleDetails(date) {
+    // Get the scheduling result for this date
+    try {
+        const response = await fetch(`${API_BASE}/scheduling/metrics/${date}`);
+        const metrics = await response.json();
+        
+        let modalContent = `
+            <h2 class="text-xl font-bold mb-4">排程詳情 - ${formatDate(date)}</h2>
+            <div class="space-y-4">
+        `;
+        
+        if (metrics.metrics) {
+            const m = metrics.metrics;
+            modalContent += `
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-gray-50 p-3 rounded">
+                        <p class="text-sm text-gray-600">總路線數</p>
+                        <p class="text-xl font-semibold">${m.total_routes}</p>
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded">
+                        <p class="text-sm text-gray-600">總配送數</p>
+                        <p class="text-xl font-semibold">${m.total_deliveries}</p>
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded">
+                        <p class="text-sm text-gray-600">總距離</p>
+                        <p class="text-xl font-semibold">${m.total_distance_km.toFixed(1)} km</p>
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded">
+                        <p class="text-sm text-gray-600">司機使用率</p>
+                        <p class="text-xl font-semibold">${m.driver_utilization_percent.toFixed(1)}%</p>
+                    </div>
+                </div>
+            `;
+            
+            // Show driver statistics
+            if (m.driver_statistics) {
+                modalContent += `
+                    <div>
+                        <h4 class="font-semibold mb-2">司機工作分配</h4>
+                        <div class="space-y-2">
+                `;
+                
+                Object.entries(m.driver_statistics).forEach(([driverId, stats]) => {
+                    modalContent += `
+                        <div class="flex justify-between items-center bg-gray-50 p-2 rounded">
+                            <span>司機 #${driverId}</span>
+                            <span class="text-sm">
+                                ${stats.deliveries} 配送 | 
+                                ${stats.distance.toFixed(1)} km | 
+                                ${Math.round(stats.duration / 60)} 小時
+                            </span>
+                        </div>
+                    `;
+                });
+                
+                modalContent += `
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Check for conflicts
+        const conflictsResponse = await fetch(`${API_BASE}/scheduling/conflicts/${date}`);
+        const conflicts = await conflictsResponse.json();
+        
+        if (conflicts.conflicts && conflicts.conflicts.length > 0) {
+            modalContent += `
+                <div>
+                    <h4 class="font-semibold mb-2 text-orange-600">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>
+                        排程衝突 (${conflicts.conflicts.length})
+                    </h4>
+                    <div class="space-y-2">
+            `;
+            
+            conflicts.conflicts.forEach(conflict => {
+                modalContent += `
+                    <div class="bg-orange-50 border border-orange-200 rounded p-2">
+                        <p class="font-medium text-sm">${conflict.type}</p>
+                        <p class="text-sm text-gray-600">${conflict.description}</p>
+                    </div>
+                `;
+            });
+            
+            modalContent += `
+                    </div>
+                </div>
+            `;
+        }
+        
+        modalContent += `
+            </div>
+        `;
+        
+        const modal = createModal('排程詳情', modalContent);
+        document.body.appendChild(modal);
+        
+    } catch (error) {
+        showNotification('載入排程詳情失敗', 'error');
+    }
+}
+
+async function applySchedule(date) {
+    if (!confirm(`確定要套用 ${formatDate(date)} 的排程嗎？這將建立實際的配送路線。`)) {
+        return;
+    }
+    
+    // Get the cached schedule data
+    if (!window.schedulingResultsCache || !window.schedulingResultsCache.has(date)) {
+        showNotification('找不到排程資料，請重新生成排程', 'error');
+        return;
+    }
+    
+    const scheduleData = window.schedulingResultsCache.get(date);
+    
+    showNotification('正在套用排程...', 'info');
+    
+    try {
+        // Call the apply endpoint with the route data
+        const response = await fetch(`${API_BASE}/scheduling/apply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                schedule_date: date,
+                route_data: scheduleData.routes
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+            showNotification(`成功套用排程！已建立 ${scheduleData.routes.length} 條路線`, 'success');
+            
+            // Refresh the routes section if it's visible
+            const routesSection = document.getElementById('routes');
+            if (routesSection && !routesSection.classList.contains('hidden')) {
+                loadRoutes(1);
+            }
+            
+            // Close the scheduling modal
+            closeModal('schedulingModal');
+        } else {
+            showNotification(result.detail || '套用排程失敗', 'error');
+        }
+    } catch (error) {
+        console.error('Apply schedule error:', error);
+        showNotification('套用排程失敗', 'error');
+    }
+}
+
+// Make functions available globally
+window.showSchedulingModal = showSchedulingModal;
+window.toggleDateRangeInputs = toggleDateRangeInputs;
+window.updateAlgorithmDescription = updateAlgorithmDescription;
+window.previewSchedule = previewSchedule;
+window.viewScheduleDetails = viewScheduleDetails;
+window.applySchedule = applySchedule;
