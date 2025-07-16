@@ -70,9 +70,14 @@ async def get_deliveries(
         query = query.filter(Delivery.driver_id == search.driver_id)
     
     if search.status:
-        status_enum = normalize_status(search.status)
-        if status_enum:
-            query = query.filter(Delivery.status == status_enum)
+        # Multiple statuses - filter using IN operator
+        status_enums = []
+        for status in search.status:
+            status_enum = normalize_status(status)
+            if status_enum:
+                status_enums.append(status_enum)
+        if status_enums:
+            query = query.filter(Delivery.status.in_(status_enums))
     
     query = apply_date_range_filter(
         query, Delivery.scheduled_date,

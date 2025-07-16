@@ -194,7 +194,7 @@ class DeliverySearchParams(BaseModel):
     keyword: Optional[str] = Field(None, description="搜尋關鍵字（訂單編號、客戶名稱、地址）")
     client_id: Optional[int] = Field(None, description="客戶ID")
     driver_id: Optional[int] = Field(None, description="司機ID")
-    status: Optional[DeliveryStatus] = Field(None, description="配送狀態")
+    status: Optional[List[DeliveryStatus]] = Field(None, description="配送狀態（支援多個狀態篩選）")
     payment_status: Optional[PaymentStatus] = Field(None, description="付款狀態")
     scheduled_date_from: Optional[date] = Field(None, description="預定配送日期起")
     scheduled_date_to: Optional[date] = Field(None, description="預定配送日期迄")
