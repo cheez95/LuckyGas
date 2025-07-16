@@ -1,12 +1,10 @@
-import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 from pathlib import Path
 import logging
-
 import sys
-from pathlib import Path
+
 sys.path.append(str(Path(__file__).parent.parent))
 
 from models.database_schema import Base

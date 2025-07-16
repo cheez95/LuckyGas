@@ -46,7 +46,6 @@ class Client(Base):
     
     # Contact info (added for API compatibility)
     name = Column(String(100), nullable=True)  # 客戶名稱
-    # phone = Column(String(20), nullable=True)  # 電話號碼 - removed
     contact_person = Column(String(50))  # 聯絡人
     
     # Business info
@@ -110,7 +109,6 @@ class Client(Base):
     holiday = Column(String(50))  # 公休日
     
     # 使用資訊
-    # status = Column(Integer, default=1)  # 狀態 (replaced by is_active)
     monthly_delivery_volume = Column(Float, default=0)  # 月配送量
     gas_return_ratio = Column(Float, default=0)  # 退氣比例
     actual_purchase_kg = Column(Float, default=0)  # 實際購買公斤數

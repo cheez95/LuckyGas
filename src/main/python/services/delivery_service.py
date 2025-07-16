@@ -5,7 +5,6 @@ from sqlalchemy import and_, or_, func
 import logging
 
 from models.database_schema import Delivery, DeliveryStatus, Client, Driver, Vehicle
-from core.database import get_db
 from utils.date_converter import TaiwanDateConverter
 
 logger = logging.getLogger(__name__)

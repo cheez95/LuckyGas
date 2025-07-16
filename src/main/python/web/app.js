@@ -34,6 +34,7 @@ let deliveryFilters = {
 
 // Delivery tab state - restore from localStorage if available
 let currentDeliveryTab = localStorage.getItem('currentDeliveryTab') || 'planned';
+let isLoadingDeliveries = false; // Flag to prevent recursive calls
 
 let routeFilters = {
     dateFrom: '',
@@ -170,6 +171,28 @@ function showSection(section) {
                     loadVehicles();
                     break;
                 case 'deliveries':
+                    // Restore tab state when first showing deliveries section
+                    const savedTab = localStorage.getItem('currentDeliveryTab');
+                    if (savedTab && savedTab !== currentDeliveryTab) {
+                        // Update the tab without triggering a reload
+                        currentDeliveryTab = savedTab;
+                        // Update UI to reflect saved tab
+                        const plannedTab = document.getElementById('tab-planned');
+                        const historyTab = document.getElementById('tab-history');
+                        if (plannedTab && historyTab) {
+                            if (savedTab === 'planned') {
+                                plannedTab.classList.add('bg-white', 'text-blue-600', 'shadow');
+                                plannedTab.classList.remove('text-gray-600', 'hover:text-gray-800');
+                                historyTab.classList.remove('bg-white', 'text-blue-600', 'shadow');
+                                historyTab.classList.add('text-gray-600', 'hover:text-gray-800');
+                            } else {
+                                historyTab.classList.add('bg-white', 'text-blue-600', 'shadow');
+                                historyTab.classList.remove('text-gray-600', 'hover:text-gray-800');
+                                plannedTab.classList.remove('bg-white', 'text-blue-600', 'shadow');
+                                plannedTab.classList.add('text-gray-600', 'hover:text-gray-800');
+                            }
+                        }
+                    }
                     loadDeliveries();
                     break;
                 case 'routes':
@@ -587,15 +610,18 @@ function renderClientsTable(clients) {
 
 // Enhanced Deliveries with date range and filters
 async function loadDeliveries(page = 1) {
+    // Prevent recursive calls
+    if (isLoadingDeliveries) {
+        console.log('Already loading deliveries, skipping...');
+        return;
+    }
+    
+    isLoadingDeliveries = true;
+    console.log('Loading deliveries for tab:', currentDeliveryTab, 'Page:', page);
+    
     try {
-        // Restore tab state when loading deliveries section
-        const savedTab = localStorage.getItem('currentDeliveryTab');
-        if (savedTab && savedTab !== currentDeliveryTab) {
-            switchDeliveryTab(savedTab);
-        } else if (currentDeliveryTab) {
-            // Ensure the UI reflects the current tab state
-            switchDeliveryTab(currentDeliveryTab);
-        }
+        // No need to restore tab state here - it's handled elsewhere
+        // This was causing a circular dependency with switchDeliveryTab
         
         // Build query parameters
         const params = new URLSearchParams({
@@ -606,10 +632,13 @@ async function loadDeliveries(page = 1) {
         // Filter based on current tab
         if (currentDeliveryTab === 'planned') {
             // For planned tab, show pending, assigned, and in_progress deliveries
-            params.append('status', 'pending,assigned,in_progress');
+            params.append('status', 'pending');
+            params.append('status', 'assigned');
+            params.append('status', 'in_progress');
         } else {
             // For history tab, show completed and cancelled deliveries
-            params.append('status', 'completed,cancelled');
+            params.append('status', 'completed');
+            params.append('status', 'cancelled');
         }
         
         if (deliveryFilters.dateFrom) params.append('scheduled_date_from', deliveryFilters.dateFrom);
@@ -625,7 +654,18 @@ async function loadDeliveries(page = 1) {
             params.append('order_desc', deliveryFilters.sortOrder === 'desc');
         }
         
-        const response = await fetch(`${API_BASE}/deliveries?${params}`);
+        const url = `${API_BASE}/deliveries?${params}`;
+        console.log('Fetching deliveries from:', url);
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            console.error('API response error:', response.status, response.statusText);
+            const errorText = await response.text();
+            console.error('Error details:', errorText);
+            throw new Error(`API error: ${response.status} ${response.statusText}`);
+        }
+        
         const data = await response.json();
         
         allDeliveries = data.items || [];
@@ -640,9 +680,39 @@ async function loadDeliveries(page = 1) {
         // Update summary statistics
         updateDeliverySummary(data.items);
         
+        // Reset loading flag
+        isLoadingDeliveries = false;
+        
     } catch (error) {
         console.error('Error loading deliveries:', error);
-        showNotification('載入配送單失敗', 'error');
+        console.error('Error stack:', error.stack);
+        console.error('Current tab:', currentDeliveryTab);
+        console.error('API_BASE:', API_BASE);
+        
+        // Show more specific error message
+        let errorMessage = '載入配送單失敗';
+        if (error.message.includes('Failed to fetch')) {
+            errorMessage = '無法連接到伺服器';
+        } else if (error.message.includes('API error')) {
+            errorMessage = `伺服器錯誤: ${error.message}`;
+        }
+        
+        showNotification(errorMessage, 'error');
+        
+        // Show empty state in table
+        const tbody = document.getElementById('deliveries-tbody');
+        if (tbody) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" class="px-6 py-4 text-center text-red-500">
+                        ${errorMessage}
+                    </td>
+                </tr>
+            `;
+        }
+        
+        // Reset loading flag even on error
+        isLoadingDeliveries = false;
     }
 }
 

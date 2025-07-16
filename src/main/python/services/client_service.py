@@ -2,11 +2,9 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
-import json
 import logging
 
 from models.database_schema import Client, PaymentMethod, VehicleType
-from core.database import get_db
 from utils.date_converter import TaiwanDateConverter
 
 logger = logging.getLogger(__name__)

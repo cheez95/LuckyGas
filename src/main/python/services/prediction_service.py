@@ -10,7 +10,6 @@ from sqlalchemy import func, and_, desc
 import logging
 
 from models.database_schema import Client, Delivery, DeliveryPrediction, DeliveryStatus
-from core.database import get_db
 
 logger = logging.getLogger(__name__)
 
