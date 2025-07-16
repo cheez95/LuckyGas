@@ -50,15 +50,18 @@ document.addEventListener('DOMContentLoaded', () => {
     setupNavigation();
     setupDateDefaults();
     
-    // Load dashboard after a small delay to ensure everything is initialized
-    setTimeout(() => {
-        console.log('Loading dashboard on page load...');
-        loadDashboard().then(() => {
-            console.log('Dashboard loaded successfully');
-        }).catch(error => {
-            console.error('Failed to load dashboard on init:', error);
-        });
-    }, 100);
+    // Check if there's a hash in the URL
+    const initialHash = window.location.hash;
+    if (initialHash && initialHash.length > 1) {
+        // Navigate to the specified section
+        const section = initialHash.substring(1);
+        console.log('Navigating to section from URL hash:', section);
+        showSection(section);
+    } else {
+        // Load dashboard as default
+        console.log('Loading dashboard as default...');
+        showSection('dashboard');
+    }
     
     setupFormHandlers();
     setupFilterHandlers();
@@ -106,12 +109,23 @@ function setupNavigation() {
                 const href = e.target.getAttribute('href');
                 if (href && href.startsWith('#')) {
                     const section = href.substring(1);
+                    // Update the URL hash
+                    window.location.hash = section;
                     showSection(section);
                 } else {
                     console.error('Invalid navigation link:', href);
                     showNotification('導航錯誤', 'error');
                 }
             });
+        });
+        
+        // Handle browser back/forward buttons
+        window.addEventListener('hashchange', () => {
+            const hash = window.location.hash;
+            if (hash && hash.length > 1) {
+                const section = hash.substring(1);
+                showSection(section);
+            }
         });
     } catch (error) {
         console.error('Error setting up navigation:', error);
@@ -138,31 +152,31 @@ function showSection(section) {
             }
         });
         
-        // Load section data
-        switch(section) {
-            case 'dashboard':
-                loadDashboard();
-                break;
-            case 'clients':
-                loadClients();
-                break;
-            case 'drivers':
-                loadDrivers();
-                break;
-            case 'vehicles':
-                loadVehicles();
-                break;
-            case 'deliveries':
-                loadDeliveries();
-                break;
-            case 'routes':
-                loadRoutes();
-                break;
+            // Load section data
+            switch(section) {
+                case 'dashboard':
+                    loadDashboard();
+                    break;
+                case 'clients':
+                    loadClients();
+                    break;
+                case 'drivers':
+                    loadDrivers();
+                    break;
+                case 'vehicles':
+                    loadVehicles();
+                    break;
+                case 'deliveries':
+                    loadDeliveries();
+                    break;
+                case 'routes':
+                    loadRoutes();
+                    break;
+            }
+        } else {
+            console.error('Section not found:', section);
+            showNotification(`找不到頁面: ${section}`, 'error');
         }
-    } else {
-        console.error('Section not found:', section);
-        showNotification(`找不到頁面: ${section}`, 'error');
-    }
     } catch (error) {
         console.error('Error showing section:', error);
         showNotification('頁面切換失敗', 'error');
@@ -1803,6 +1817,12 @@ async function assignDelivery(deliveryId) {
 
 // Setup form handlers
 function setupFormHandlers() {
+    // Scheduling form handler
+    const schedulingForm = document.getElementById('scheduling-form');
+    if (schedulingForm) {
+        schedulingForm.addEventListener('submit', handleSchedulingFormSubmit);
+    }
+    
     // Add client form handler
     const addClientForm = document.getElementById('add-client-form');
     if (addClientForm) {
@@ -3666,11 +3686,8 @@ async function previewSchedule() {
     }, 1000);
 }
 
-// Handle form submission
-document.addEventListener('DOMContentLoaded', () => {
-    const schedulingForm = document.getElementById('scheduling-form');
-    if (schedulingForm) {
-        schedulingForm.addEventListener('submit', async (e) => {
+// Handle scheduling form submission
+async function handleSchedulingFormSubmit(e) {
     e.preventDefault();
     
     const formData = new FormData(e.target);
@@ -3795,9 +3812,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Display results
     displaySchedulingResults(results, successCount, failCount);
-        });
-    }
-});
+}
 
 function displaySchedulingResults(results, successCount, failCount) {
     const resultsDiv = document.getElementById('scheduling-results-content');
