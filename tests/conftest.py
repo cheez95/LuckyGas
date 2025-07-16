@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent / "src" / "main" / "python"))
 
 from core.database import DatabaseManager
-from utils.data_importer import ExcelDataImporter
+from common.data_importer import ExcelDataImporter
 import subprocess
 import time
 import os
