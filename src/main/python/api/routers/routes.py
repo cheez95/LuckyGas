@@ -29,9 +29,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/routes", tags=["routes"])
 
 
-def parse_route_details(route: Route) -> List[RoutePointResponse]:
+def parse_route_details(route: Route, db: Session = None) -> List[RoutePointResponse]:
     """Parse route details JSON into RoutePointResponse objects"""
     if not route.route_details:
+        return []
+    
+    if not db:
+        # If no db session provided, we can't fetch client details
         return []
     
     try:
@@ -40,7 +44,7 @@ def parse_route_details(route: Route) -> List[RoutePointResponse]:
         
         for point_data in details.get('points', []):
             # Get client info for additional details
-            client = route.driver.db.query(Client).filter(
+            client = db.query(Client).filter(
                 Client.id == point_data['client_id']
             ).first()
             
@@ -228,7 +232,7 @@ async def plan_routes(
                 optimization_score=route.optimization_score,
                 created_at=route.created_at,
                 updated_at=route.updated_at,
-                route_points=parse_route_details(route)
+                route_points=parse_route_details(route, db)
             )
             route_responses.append(route_response)
         
@@ -362,8 +366,7 @@ async def get_route(
         vehicle = db.query(Vehicle).filter(Vehicle.id == route.vehicle_id).first()
         
         # Parse route details with proper database session
-        route.driver.db = db  # Temporary fix for session access
-        route_points = parse_route_details(route)
+        route_points = parse_route_details(route, db)
         
         return RouteResponse(
             id=route.id,

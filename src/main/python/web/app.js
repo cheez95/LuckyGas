@@ -49,7 +49,17 @@ document.addEventListener('DOMContentLoaded', () => {
     
     setupNavigation();
     setupDateDefaults();
-    loadDashboard();
+    
+    // Load dashboard after a small delay to ensure everything is initialized
+    setTimeout(() => {
+        console.log('Loading dashboard on page load...');
+        loadDashboard().then(() => {
+            console.log('Dashboard loaded successfully');
+        }).catch(error => {
+            console.error('Failed to load dashboard on init:', error);
+        });
+    }, 100);
+    
     setupFormHandlers();
     setupFilterHandlers();
 });
@@ -162,8 +172,17 @@ function showSection(section) {
 // Dashboard with real data
 async function loadDashboard() {
     try {
+        // Show loading state
+        document.getElementById('total-clients').textContent = '載入中...';
+        document.getElementById('today-deliveries').textContent = '載入中...';
+        document.getElementById('available-drivers').textContent = '載入中...';
+        document.getElementById('available-vehicles').textContent = '載入中...';
+        
         // Load dashboard statistics from new endpoint
         const statsRes = await fetch(`${API_BASE}/dashboard/stats`);
+        if (!statsRes.ok) {
+            throw new Error(`HTTP error! status: ${statsRes.status}`);
+        }
         const stats = await statsRes.json();
         
         // Update statistics cards
@@ -181,6 +200,12 @@ async function loadDashboard() {
     } catch (error) {
         console.error('Error loading dashboard:', error);
         showNotification('載入儀表板失敗', 'error');
+        
+        // Show error state
+        document.getElementById('total-clients').textContent = '-';
+        document.getElementById('today-deliveries').textContent = '-';
+        document.getElementById('available-drivers').textContent = '-';
+        document.getElementById('available-vehicles').textContent = '-';
     }
 }
 
@@ -561,7 +586,7 @@ function renderDeliveriesTable(deliveries) {
         const row = document.createElement('tr');
         row.className = 'hover:bg-gray-50 transition-colors';
         row.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">${delivery.order_number}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">${delivery.order_number || delivery.id}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm">${delivery.client_name || '-'}</td>
             <td class="px-6 py-4 text-sm">
                 <div>${delivery.delivery_address}</div>
@@ -1522,66 +1547,16 @@ function closeModal(modal) {
 
 // Modal display functions
 function showAddClientModal() {
-    let modal = document.getElementById('addClientModal');
-    if (!modal) {
-        // Create modal dynamically if it doesn't exist
-        modal = createModal(`
-            <div class="bg-white rounded-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
-                <h2 class="text-xl font-bold mb-4">新增客戶</h2>
-                <form id="add-client-form" class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">客戶編號</label>
-                        <input type="text" name="client_code" required class="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">客戶名稱</label>
-                        <input type="text" name="name" required class="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">發票抬頭</label>
-                        <input type="text" name="invoice_title" required class="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">地址</label>
-                        <input type="text" name="address" required class="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">電話</label>
-                        <input type="tel" name="phone" class="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">聯絡人</label>
-                        <input type="text" name="contact_person" class="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">付款方式</label>
-                        <select name="payment_method" class="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500">
-                            <option value="CASH">現金</option>
-                            <option value="MONTHLY">月結</option>
-                            <option value="TRANSFER">轉帳</option>
-                        </select>
-                    </div>
-                    <div class="flex justify-end space-x-2 pt-4">
-                        <button type="button" onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
-                            取消
-                        </button>
-                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-                            新增
-                        </button>
-                    </div>
-                </form>
-            </div>
-        `);
-        modal.id = 'addClientModal';
-        // Re-setup form handler for the new form
-        setupAddClientFormHandler();
-    } else {
+    const modal = document.getElementById('addClientModal');
+    if (modal) {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
         const form = modal.querySelector('form');
         if (form) {
             form.reset();
         }
+    } else {
+        console.error('Add client modal not found in DOM');
     }
 }
 
@@ -1824,69 +1799,6 @@ async function assignDelivery(deliveryId) {
             showNotification('指派失敗', 'error');
         }
     });
-}
-
-// View delivery details
-async function viewDelivery(deliveryId) {
-    try {
-        const response = await fetch(`${API_BASE}/deliveries/${deliveryId}`);
-        const delivery = await response.json();
-        
-        const modalContent = `
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <p class="text-sm text-gray-600">配送單號</p>
-                    <p class="font-medium">${delivery.order_number}</p>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-600">狀態</p>
-                    <p class="font-medium">${getStatusText(delivery.status)}</p>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-600">客戶名稱</p>
-                    <p class="font-medium">${delivery.client_name || '-'}</p>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-600">配送日期</p>
-                    <p class="font-medium">${formatDate(delivery.scheduled_date)}</p>
-                </div>
-                <div class="col-span-2">
-                    <p class="text-sm text-gray-600">配送地址</p>
-                    <p class="font-medium">${delivery.delivery_address}</p>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-600">瓦斯數量</p>
-                    <p class="font-medium">${delivery.gas_quantity} 桶</p>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-600">總金額</p>
-                    <p class="font-medium">NT$ ${delivery.total_amount}</p>
-                </div>
-                ${delivery.driver_name ? `
-                <div>
-                    <p class="text-sm text-gray-600">司機</p>
-                    <p class="font-medium">${delivery.driver_name}</p>
-                </div>
-                ` : ''}
-                ${delivery.vehicle_plate ? `
-                <div>
-                    <p class="text-sm text-gray-600">車輛</p>
-                    <p class="font-medium">${delivery.vehicle_plate}</p>
-                </div>
-                ` : ''}
-                ${delivery.notes ? `
-                <div class="col-span-2">
-                    <p class="text-sm text-gray-600">備註</p>
-                    <p class="font-medium">${delivery.notes}</p>
-                </div>
-                ` : ''}
-            </div>
-        `;
-        
-        showModal('配送單詳細資料', modalContent);
-    } catch (error) {
-        showNotification('載入配送單資料失敗', 'error');
-    }
 }
 
 // Setup form handlers
@@ -2678,6 +2590,30 @@ function setupRouteDateDefaults() {
     if (toInput) {
         toInput.value = toDate;
         routeFilters.dateTo = toDate;
+    }
+}
+
+// Load drivers for filter dropdown
+async function loadDriversForFilter(selectId) {
+    try {
+        const response = await fetch(`${API_BASE}/drivers?is_active=true`);
+        const data = await response.json();
+        const drivers = data.items || [];
+        
+        const select = document.getElementById(selectId);
+        if (select) {
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">所有司機</option>';
+            drivers.forEach(driver => {
+                const option = document.createElement('option');
+                option.value = driver.id;
+                option.textContent = `${driver.name} (${driver.employee_id})`;
+                select.appendChild(option);
+            });
+            select.value = currentValue;
+        }
+    } catch (error) {
+        console.error('Error loading drivers for filter:', error);
     }
 }
 
@@ -3544,12 +3480,29 @@ document.getElementById('add-route-form')?.addEventListener('submit', async (e) 
     }
 });
 
-// Close modal helper function
-function closeModal(modalId) {
-    const modal = document.getElementById(modalId);
+// Close modal helper function - handles both element and ID
+function closeModal(modalOrId) {
+    let modal;
+    
+    // Check if it's an element or an ID
+    if (typeof modalOrId === 'string') {
+        modal = document.getElementById(modalOrId);
+    } else if (modalOrId instanceof HTMLElement) {
+        modal = modalOrId;
+    } else {
+        console.error('Invalid modal parameter:', modalOrId);
+        return;
+    }
+    
     if (modal) {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
+        // Check if it's a predefined modal with hidden class
+        if (modal.id && ['addClientModal', 'addDriverModal', 'addVehicleModal', 'addDeliveryModal', 'routePlanModal', 'addRouteModal'].includes(modal.id)) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        } else {
+            // It's a dynamically created modal, remove it from DOM
+            modal.remove();
+        }
     }
 }
 
