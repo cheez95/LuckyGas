@@ -32,8 +32,8 @@ let deliveryFilters = {
     sortOrder: 'desc'
 };
 
-// Delivery tab state
-let currentDeliveryTab = 'planned';
+// Delivery tab state - restore from localStorage if available
+let currentDeliveryTab = localStorage.getItem('currentDeliveryTab') || 'planned';
 
 let routeFilters = {
     dateFrom: '',
@@ -189,6 +189,9 @@ function showSection(section) {
 // Delivery tab switching
 function switchDeliveryTab(tab) {
     currentDeliveryTab = tab;
+    
+    // Save tab selection to localStorage
+    localStorage.setItem('currentDeliveryTab', tab);
     
     // Update tab buttons
     const plannedTab = document.getElementById('tab-planned');
@@ -585,6 +588,15 @@ function renderClientsTable(clients) {
 // Enhanced Deliveries with date range and filters
 async function loadDeliveries(page = 1) {
     try {
+        // Restore tab state when loading deliveries section
+        const savedTab = localStorage.getItem('currentDeliveryTab');
+        if (savedTab && savedTab !== currentDeliveryTab) {
+            switchDeliveryTab(savedTab);
+        } else if (currentDeliveryTab) {
+            // Ensure the UI reflects the current tab state
+            switchDeliveryTab(currentDeliveryTab);
+        }
+        
         // Build query parameters
         const params = new URLSearchParams({
             page: page,
