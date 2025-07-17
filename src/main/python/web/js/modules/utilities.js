@@ -398,6 +398,53 @@
             unit_price: { required: true, type: 'amount', options: { min: 0, max: 99999 } },
             delivery_address: { required: false, type: 'address' },
             notes: { required: false, type: 'name', options: { maxLength: 500 } }
+        },
+        
+        // Route validation rules
+        route: {
+            route_name: { required: true, type: 'name', options: { minLength: 2, maxLength: 100 } },
+            driver_id: { required: true, type: 'quantity' },
+            vehicle_id: { required: true, type: 'quantity' },
+            client_ids: { 
+                required: true, 
+                type: 'custom',
+                validator: (value) => {
+                    if (!value || (Array.isArray(value) && value.length === 0)) {
+                        return { isValid: false, message: '請至少選擇一個客戶' };
+                    }
+                    return { isValid: true, message: '' };
+                }
+            }
+        },
+        
+        // Schedule validation rules
+        schedule: {
+            schedule_type: { required: true, type: 'name' },
+            schedule_date: { 
+                required: false, // Conditional based on schedule_type
+                type: 'date',
+                options: { allowPast: false }
+            },
+            start_date: {
+                required: false, // Conditional based on schedule_type
+                type: 'date',
+                options: { allowPast: false }
+            },
+            end_date: {
+                required: false, // Conditional based on schedule_type
+                type: 'date',
+                options: { allowPast: false }
+            },
+            objectives: {
+                required: true,
+                type: 'custom',
+                validator: (value) => {
+                    if (!value || (Array.isArray(value) && value.length === 0)) {
+                        return { isValid: false, message: '請至少選擇一個排程目標' };
+                    }
+                    return { isValid: true, message: '' };
+                }
+            }
         }
     };
     

@@ -1293,31 +1293,65 @@ document.getElementById('route-plan-form')?.addEventListener('submit', async (e)
     const form = e.target;
     const formData = new FormData(form);
     
+    // Clear any previous errors
+    ValidationUtils.clearFormErrors(form);
+    
+    // Get form data
+    const rawData = {};
+    for (let [key, value] of formData.entries()) {
+        rawData[key] = value;
+    }
+    
     // Get selected driver and vehicle IDs
     const driverIds = Array.from(form.querySelectorAll('input[name="driver_ids"]:checked'))
         .map(input => parseInt(input.value));
     const vehicleIds = Array.from(form.querySelectorAll('input[name="vehicle_ids"]:checked'))
         .map(input => parseInt(input.value));
     
+    // Prepare data for validation
+    const dataToValidate = {
+        ...rawData,
+        driver_ids: driverIds,
+        vehicle_ids: vehicleIds
+    };
+    
+    // Define validation rules for route planning
+    const routePlanValidationRules = {
+        delivery_date: { required: true, type: 'date', options: { allowPast: false } },
+        optimize_by: { required: true, type: 'name' },
+        start_time: { required: true, type: 'time' },
+        end_time: { required: true, type: 'time' },
+        max_distance_km: { required: false, type: 'quantity', options: { min: 1, max: 1000 } },
+        max_duration_minutes: { required: false, type: 'quantity', options: { min: 1, max: 1440 } }
+    };
+    
+    // Validate form data
+    const validationResult = ValidationUtils.validateForm(dataToValidate, routePlanValidationRules);
+    if (!validationResult.isValid) {
+        ValidationUtils.displayFormErrors(form, validationResult.errors);
+        showNotification('請修正表單錯誤', 'error');
+        return;
+    }
+    
     // Build request data
     const requestData = {
-        delivery_date: formData.get('delivery_date'),
-        area: formData.get('area') || null,
+        delivery_date: rawData.delivery_date,
+        area: rawData.area || null,
         driver_ids: driverIds.length > 0 ? driverIds : null,
         vehicle_ids: vehicleIds.length > 0 ? vehicleIds : null,
-        optimize_by: formData.get('optimize_by'),
-        start_time: formData.get('start_time'),
-        end_time: formData.get('end_time'),
-        use_traffic: formData.get('use_traffic') === 'on',
-        include_break_time: formData.get('include_break_time') === 'on'
+        optimize_by: rawData.optimize_by,
+        start_time: rawData.start_time,
+        end_time: rawData.end_time,
+        use_traffic: rawData.use_traffic === 'on',
+        include_break_time: rawData.include_break_time === 'on'
     };
     
     // Add optional parameters if provided
-    if (formData.get('max_distance_km')) {
-        requestData.max_distance_km = parseFloat(formData.get('max_distance_km'));
+    if (rawData.max_distance_km) {
+        requestData.max_distance_km = parseFloat(rawData.max_distance_km);
     }
-    if (formData.get('max_duration_minutes')) {
-        requestData.max_duration_minutes = parseInt(formData.get('max_duration_minutes'));
+    if (rawData.max_duration_minutes) {
+        requestData.max_duration_minutes = parseInt(rawData.max_duration_minutes);
     }
     
     try {
@@ -1659,12 +1693,28 @@ async function editRoute(routeId) {
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
+            // Clear any previous errors
+            ValidationUtils.clearFormErrors(form);
+            
             const formData = new FormData(form);
+            const rawData = {};
+            for (let [key, value] of formData.entries()) {
+                rawData[key] = value;
+            }
+            
+            // Validate form data using the route validation rules
+            const validationResult = ValidationUtils.validateForm(rawData, validationRules.route);
+            if (!validationResult.isValid) {
+                ValidationUtils.displayFormErrors(form, validationResult.errors);
+                showNotification('請修正表單錯誤', 'error');
+                return;
+            }
+            
             const updateData = {
-                route_name: formData.get('route_name'),
-                driver_id: parseInt(formData.get('driver_id')),
-                vehicle_id: parseInt(formData.get('vehicle_id')),
-                is_optimized: formData.get('is_optimized') === 'on'
+                route_name: rawData.route_name,
+                driver_id: parseInt(rawData.driver_id),
+                vehicle_id: parseInt(rawData.vehicle_id),
+                is_optimized: rawData.is_optimized === 'on'
             };
             
             try {
@@ -1816,13 +1866,46 @@ function removeClientFromRoute(index) {
 document.getElementById('add-route-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    if (selectedRouteClients.length === 0) {
-        showNotification('請至少選擇一個客戶', 'warning');
-        return;
+    const form = e.target;
+    
+    // Clear any previous errors
+    ValidationUtils.clearFormErrors(form);
+    
+    const formData = new FormData(form);
+    const rawData = {};
+    for (let [key, value] of formData.entries()) {
+        rawData[key] = value;
     }
     
-    const form = e.target;
-    const formData = new FormData(form);
+    // Add client_ids for validation
+    rawData.client_ids = selectedRouteClients.map(c => c.id);
+    
+    // Define validation rules for manual route creation
+    const manualRouteValidationRules = {
+        route_date: { required: true, type: 'date', options: { allowPast: false } },
+        route_name: { required: true, type: 'name', options: { minLength: 2, maxLength: 100 } },
+        area: { required: false, type: 'name', options: { minLength: 2, maxLength: 50 } },
+        driver_id: { required: true, type: 'quantity' },
+        vehicle_id: { required: true, type: 'quantity' },
+        client_ids: { 
+            required: true, 
+            type: 'custom',
+            validator: (value) => {
+                if (!value || (Array.isArray(value) && value.length === 0)) {
+                    return { isValid: false, message: '請至少選擇一個客戶' };
+                }
+                return { isValid: true, message: '' };
+            }
+        }
+    };
+    
+    // Validate form data
+    const validationResult = ValidationUtils.validateForm(rawData, manualRouteValidationRules);
+    if (!validationResult.isValid) {
+        ValidationUtils.displayFormErrors(form, validationResult.errors);
+        showNotification('請修正表單錯誤', 'error');
+        return;
+    }
     
     // Build route points
     const routePoints = selectedRouteClients.map((client, index) => ({
@@ -1834,11 +1917,11 @@ document.getElementById('add-route-form')?.addEventListener('submit', async (e) 
     }));
     
     const requestData = {
-        route_date: formData.get('route_date'),
-        route_name: formData.get('route_name'),
-        area: formData.get('area'),
-        driver_id: parseInt(formData.get('driver_id')),
-        vehicle_id: parseInt(formData.get('vehicle_id')),
+        route_date: rawData.route_date,
+        route_name: rawData.route_name,
+        area: rawData.area,
+        driver_id: parseInt(rawData.driver_id),
+        vehicle_id: parseInt(rawData.vehicle_id),
         route_points: routePoints
     };
     
@@ -2015,17 +2098,22 @@ async function previewSchedule() {
 async function handleSchedulingFormSubmit(e) {
     e.preventDefault();
     
-    const formData = new FormData(e.target);
-    const scheduleType = formData.get('schedule_type');
+    const form = e.target;
+    
+    // Clear any previous errors
+    ValidationUtils.clearFormErrors(form);
+    
+    const formData = new FormData(form);
+    const rawData = {};
+    for (let [key, value] of formData.entries()) {
+        rawData[key] = value;
+    }
+    
+    const scheduleType = rawData.schedule_type;
     
     // Get selected objectives
-    const objectives = [];
-    formData.getAll('objectives').forEach(obj => objectives.push(obj));
-    
-    if (objectives.length === 0) {
-        showNotification('請至少選擇一個優化目標', 'error');
-        return;
-    }
+    const objectives = formData.getAll('objectives');
+    rawData.objectives = objectives;
     
     // Get selected resources
     const driverIds = Array.from(document.querySelector('select[name="driver_ids"]').selectedOptions)
@@ -2033,25 +2121,65 @@ async function handleSchedulingFormSubmit(e) {
     const vehicleIds = Array.from(document.querySelector('select[name="vehicle_ids"]').selectedOptions)
         .map(option => parseInt(option.value));
     
+    // Define validation rules based on schedule type
+    const scheduleValidationRules = {
+        schedule_type: { required: true, type: 'name' },
+        objectives: {
+            required: true,
+            type: 'custom',
+            validator: (value) => {
+                if (!value || (Array.isArray(value) && value.length === 0)) {
+                    return { isValid: false, message: '請至少選擇一個優化目標' };
+                }
+                return { isValid: true, message: '' };
+            }
+        },
+        algorithm: { required: true, type: 'name' },
+        time_limit_seconds: { required: true, type: 'quantity', options: { min: 1, max: 300 } },
+        travel_speed_kmh: { required: true, type: 'quantity', options: { min: 10, max: 100 } },
+        max_deliveries_per_route: { required: true, type: 'quantity', options: { min: 1, max: 100 } },
+        min_deliveries_per_route: { required: true, type: 'quantity', options: { min: 1, max: 50 } }
+    };
+    
+    // Add date validation based on schedule type
+    if (scheduleType === 'single') {
+        scheduleValidationRules.schedule_date = { required: true, type: 'date', options: { allowPast: false } };
+    } else {
+        scheduleValidationRules.start_date = { required: true, type: 'date', options: { allowPast: false } };
+        scheduleValidationRules.end_date = { 
+            required: true, 
+            type: 'custom',
+            validator: (value) => {
+                if (!value) return { isValid: false, message: '請選擇結束日期' };
+                const startDate = new Date(rawData.start_date);
+                const endDate = new Date(value);
+                if (endDate < startDate) {
+                    return { isValid: false, message: '結束日期必須在開始日期之後' };
+                }
+                const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+                if (daysDiff > 30) {
+                    return { isValid: false, message: '日期範圍不能超過 30 天' };
+                }
+                return { isValid: true, message: '' };
+            }
+        };
+    }
+    
+    // Validate form data
+    const validationResult = ValidationUtils.validateForm(rawData, scheduleValidationRules);
+    if (!validationResult.isValid) {
+        ValidationUtils.displayFormErrors(form, validationResult.errors);
+        showNotification('請修正表單錯誤', 'error');
+        return;
+    }
+    
     // Determine dates to schedule
     let datesToSchedule = [];
     if (scheduleType === 'single') {
-        datesToSchedule.push(formData.get('schedule_date'));
+        datesToSchedule.push(rawData.schedule_date);
     } else {
-        const startDate = new Date(formData.get('start_date'));
-        const endDate = new Date(formData.get('end_date'));
-        
-        if (endDate < startDate) {
-            showNotification('結束日期必須在開始日期之後', 'error');
-            return;
-        }
-        
-        // Limit to 30 days
-        const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
-        if (daysDiff > 30) {
-            showNotification('日期範圍不能超過 30 天', 'error');
-            return;
-        }
+        const startDate = new Date(rawData.start_date);
+        const endDate = new Date(rawData.end_date);
         
         for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
             datesToSchedule.push(new Date(d).toISOString().split('T')[0]);
