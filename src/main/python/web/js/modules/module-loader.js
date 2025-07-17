@@ -32,7 +32,7 @@
     function loadModule(moduleName) {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = `js/modules/${moduleName}`;
+            script.src = `/js/modules/${moduleName}`;
             script.type = 'text/javascript';
             script.async = false;
             

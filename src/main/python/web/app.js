@@ -58,6 +58,9 @@ const SecurityUtils = {
     }
 };
 
+// API Base URL - Use from config if available, otherwise default to localhost
+const API_BASE = window.APP_CONFIG?.API?.BASE_URL || 'http://localhost:8000/api';
+
 /**
  * CSRF Protection Module
  * Inline implementation for immediate availability
@@ -216,7 +219,7 @@ let routeFilters = {
 };
 
 // Initialize
-document.addEventListener('DOMContentLoaded', () => {
+function initializeApp() {
     // Initialize event delegation
     eventDelegation.init();
     
@@ -242,6 +245,17 @@ document.addEventListener('DOMContentLoaded', () => {
     
     setupFormHandlers();
     setupFilterHandlers();
+}
+
+// Wait for both DOM and modules to be ready
+document.addEventListener('DOMContentLoaded', () => {
+    // Check if modules are already loaded
+    if (window.LuckyGasModules && Object.keys(window.LuckyGasModules).length > 0) {
+        initializeApp();
+    } else {
+        // Wait for modules to load
+        window.addEventListener('modulesLoaded', initializeApp);
+    }
 });
 
 // Setup date defaults
@@ -744,14 +758,19 @@ function showNotification(message, type = 'info') {
 
 // Quick stats refresh
 async function refreshStats(event) {
-    const btn = event.target;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-sync fa-spin"></i>';
+    // Handle being called from onclick directly or with event
+    const btn = event?.target || event?.currentTarget || document.querySelector('button[onclick*="refreshStats"]');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-sync fa-spin"></i> 重新整理';
+    }
     
     await loadDashboard();
     
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-sync"></i>';
+    if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync"></i> 重新整理';
+    }
     showNotification('統計資料已更新', 'success');
 }
 
