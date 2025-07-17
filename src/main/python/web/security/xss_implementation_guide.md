@@ -6,7 +6,7 @@ This guide provides step-by-step instructions for implementing XSS fixes in app.
 ## Prerequisites
 1. Include SecurityUtils module in your HTML before app.js:
 ```html
-<script src="security/security-utils.js"></script>
+<script src="/utils/security-utils.js"></script>
 <script src="app.js"></script>
 ```
 

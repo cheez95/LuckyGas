@@ -1,4 +1,6 @@
+########################
 # Python
+########################
 __pycache__/
 *.py[cod]
 *$py.class
@@ -16,43 +18,136 @@ parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Virtual environments
+########################
+# Python Testing
+########################
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+pytest_cache/
+cover/
+
+########################
+# Virtual Environments
+########################
 venv/
 env/
 ENV/
+env.bak/
+venv.bak/
 
-# Environment variables
+########################
+# Environment Variables
+########################
 .env
 .env.local
 .env.production
 .env.development
+.env.test
+.env.*
 
-# IDEs
+########################
+# IDEs and Editors
+########################
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+.project
+.pydevproject
+.settings/
+.classpath
 
-# OS
+########################
+# Operating System
+########################
+# macOS
 .DS_Store
-Thumbs.db
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+########################
 # Logs
+########################
 *.log
 logs/
+log/
+server*.log
+access.log
+error.log
+debug.log
 
-# Output files (use output/ directory instead)
+########################
+# Test Artifacts
+########################
+test-results/
+test-reports/
+screenshots/
+.screenshots/
+test-screenshots/
+coverage/
+.nyc_output/
+
+########################
+# Output and Data Files
+########################
+# Use proper directories instead
 *.csv
 *.json
 *.xlsx
+*.xml
 output/
+data/processed/
+data/temp/
 
-# Temporary files
+########################
+# Temporary Files
+########################
 tmp/
 temp/
 *.tmp
-*.bak2025-07-16-caveat*
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+.cache/
+*-backup.*
+*-old.*
+*_backup.*
+*_old.*
+
+########################
+# Project-specific patterns
+########################
+# Date-prefixed backup files
+????-??-??-*
+# Server instances
+server_instance_*.log
+# Test output files that might be created
+test_*.png
+test_*.jpg
+*.test.json
