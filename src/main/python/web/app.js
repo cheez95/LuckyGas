@@ -383,6 +383,119 @@ const html = {
 // API Base URL
 const API_BASE = window.APP_CONFIG?.API?.BASE_URL || 'http://localhost:8000/api';
 
+// Taiwan ID validation function
+function validateTaiwanId(id) {
+    if (!id || typeof id !== 'string') {
+        return { isValid: false, message: '身分證字號不能為空' };
+    }
+    
+    // Check format: 1 letter + 9 digits
+    if (!/^[A-Z][0-9]{9}$/.test(id)) {
+        return { isValid: false, message: '身分證字號格式錯誤 (應為1個大寫字母+9個數字)' };
+    }
+    
+    // Taiwan ID checksum validation
+    const letterMapping = {
+        'A': 10, 'B': 11, 'C': 12, 'D': 13, 'E': 14, 'F': 15, 'G': 16, 'H': 17,
+        'I': 34, 'J': 18, 'K': 19, 'L': 20, 'M': 21, 'N': 22, 'O': 35, 'P': 23,
+        'Q': 24, 'R': 25, 'S': 26, 'T': 27, 'U': 28, 'V': 29, 'W': 32, 'X': 30,
+        'Y': 31, 'Z': 33
+    };
+    
+    const letter = id[0];
+    const letterNum = letterMapping[letter];
+    
+    // Calculate checksum
+    let sum = Math.floor(letterNum / 10) + (letterNum % 10) * 9;
+    
+    for (let i = 1; i < 9; i++) {
+        sum += parseInt(id[i]) * (9 - i);
+    }
+    
+    sum += parseInt(id[9]);
+    
+    if (sum % 10 !== 0) {
+        return { isValid: false, message: '身分證字號檢查碼錯誤' };
+    }
+    
+    return { isValid: true, message: '' };
+}
+
+// Global validation rules for all forms
+const validationRules = {
+    // Client validation rules
+    client: {
+        name: { required: true, type: 'name', options: { minLength: 2, maxLength: 100 } },
+        invoice_title: { required: false, type: 'name', options: { minLength: 2, maxLength: 100 } },
+        tax_id: { 
+            required: false, 
+            type: 'custom', 
+            validator: (value) => {
+                if (!value) return { isValid: true, message: '' };
+                if (!/^\d{8}$/.test(value)) {
+                    return { isValid: false, message: '統一編號必須是8位數字' };
+                }
+                return { isValid: true, message: '' };
+            }
+        },
+        contact_person: { required: false, type: 'name', options: { minLength: 2, maxLength: 50 } },
+        phone: { required: false, type: 'phone' },
+        email: { required: false, type: 'email' },
+        address: { required: true, type: 'address' },
+        district: { required: false, type: 'name', options: { minLength: 2, maxLength: 50 } }
+    },
+    
+    // Driver validation rules
+    driver: {
+        name: { required: true, type: 'name', options: { minLength: 2, maxLength: 50 } },
+        employee_id: { required: true, type: 'clientCode' }, // Reusing clientCode validation for employee ID
+        phone: { required: true, type: 'phone' },
+        id_number: { 
+            required: true, 
+            type: 'custom',
+            validator: validateTaiwanId
+        },
+        address: { required: true, type: 'address' },
+        emergency_contact: { required: true, type: 'name', options: { minLength: 2, maxLength: 50 } },
+        emergency_phone: { required: true, type: 'phone' },
+        license_number: { required: true, type: 'name', options: { minLength: 5, maxLength: 20 } },
+        license_type: { required: true, type: 'name' }
+    },
+    
+    // Vehicle validation rules
+    vehicle: {
+        license_plate: { required: true, type: 'licensePlate' },
+        vehicle_type: { required: true, type: 'name' },
+        brand: { required: false, type: 'name', options: { minLength: 2, maxLength: 50 } },
+        model: { required: false, type: 'name', options: { minLength: 2, maxLength: 50 } },
+        year: { 
+            required: false, 
+            type: 'custom',
+            validator: (value) => {
+                if (!value) return { isValid: true, message: '' };
+                const year = parseInt(value);
+                const currentYear = new Date().getFullYear();
+                if (isNaN(year) || year < 1900 || year > currentYear + 1) {
+                    return { isValid: false, message: '請輸入有效的年份' };
+                }
+                return { isValid: true, message: '' };
+            }
+        },
+        capacity: { required: true, type: 'quantity', options: { min: 1, max: 1000 } }
+    },
+    
+    // Delivery validation rules
+    delivery: {
+        client_id: { required: true, type: 'quantity' },
+        scheduled_date: { required: true, type: 'date', options: { allowPast: false } },
+        scheduled_time: { required: false, type: 'time' },
+        quantity: { required: true, type: 'quantity', options: { min: 1, max: 999 } },
+        unit_price: { required: true, type: 'amount', options: { min: 0, max: 99999 } },
+        delivery_address: { required: false, type: 'address' },
+        notes: { required: false, type: 'name', options: { maxLength: 500 } }
+    }
+};
+
 // State
 let currentPage = window.APP_CONSTANTS?.PAGES?.DASHBOARD || 'dashboard';
 let currentClientPage = 1;
@@ -684,61 +797,29 @@ async function loadDashboard() {
 
 function loadWeeklyDeliveryChartFromStats(weekTrend) {
     try {
-        const canvas = document.getElementById('deliveryChart');
-        if (!canvas) {
-            console.error('Delivery chart canvas not found');
-            return;
-        }
-        
         if (!weekTrend || weekTrend.length === 0) {
             console.warn('No week trend data available');
             return;
         }
         
-        const ctx = canvas.getContext('2d');
         const labels = weekTrend.map(day => day.day);
         const totalData = weekTrend.map(day => day.total);
         const completedData = weekTrend.map(day => day.completed);
         
-        // Destroy existing chart if it exists
-        if (window.deliveryChart && typeof window.deliveryChart.destroy === 'function') {
-            window.deliveryChart.destroy();
-        }
-        
-        window.deliveryChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
+        window.deliveryChart = chartUtils.createLineChart({
+            canvasId: 'deliveryChart',
+            labels: labels,
+            datasets: [
+                {
                     label: '總配送數',
-                    data: totalData,
-                    borderColor: window.APP_CONSTANTS?.CHART_COLORS?.PRIMARY || 'rgb(59, 130, 246)',
-                    backgroundColor: window.APP_CONSTANTS?.CHART_COLORS?.PRIMARY_ALPHA || 'rgba(59, 130, 246, 0.1)',
-                    tension: window.APP_CONFIG?.UI?.CHARTS?.LINE_TENSION || 0.1
-                }, {
-                    label: '已完成',
-                    data: completedData,
-                    borderColor: window.APP_CONSTANTS?.CHART_COLORS?.SUCCESS || 'rgb(34, 197, 94)',
-                    backgroundColor: window.APP_CONSTANTS?.CHART_COLORS?.SUCCESS_ALPHA || 'rgba(34, 197, 94, 0.1)',
-                    tension: window.APP_CONFIG?.UI?.CHARTS?.LINE_TENSION || 0.1
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        display: true
-                    }
+                    data: totalData
                 },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            stepSize: 1
-                        }
-                    }
+                {
+                    label: '已完成',
+                    data: completedData
                 }
-            }
+            ],
+            existingChart: window.deliveryChart
         });
     } catch (error) {
         console.error('Error loading delivery chart:', error);
@@ -747,106 +828,67 @@ function loadWeeklyDeliveryChartFromStats(weekTrend) {
 
 function loadStatusChartFromStats(todayDeliveries) {
     try {
-        const canvas = document.getElementById('statusChart');
-        if (!canvas) {
-            console.error('Status chart canvas not found');
-            return;
-        }
-        const ctx = canvas.getContext('2d');
-    
-    const completed = todayDeliveries?.completed || 0;
-    const pending = todayDeliveries?.pending || 0;
-    const inProgress = todayDeliveries?.in_progress || 0;
-    const cancelled = todayDeliveries?.cancelled || 0;
+        const completed = todayDeliveries?.completed || 0;
+        const pending = todayDeliveries?.pending || 0;
+        const inProgress = todayDeliveries?.in_progress || 0;
+        const cancelled = todayDeliveries?.cancelled || 0;
 
-    // Destroy existing chart if it exists
-    if (window.statusChart && typeof window.statusChart.destroy === 'function') {
-        window.statusChart.destroy();
-    }
-
-    window.statusChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
+        window.statusChart = chartUtils.createDoughnutChart({
+            canvasId: 'statusChart',
             labels: ['已完成', '待配送', '配送中', '已取消'],
-            datasets: [{
-                data: [completed, pending, inProgress, cancelled],
-                backgroundColor: [
-                    window.APP_CONSTANTS?.CHART_COLORS?.SUCCESS || 'rgba(34, 197, 94, 0.8)',
-                    window.APP_CONSTANTS?.CHART_COLORS?.WARNING || 'rgba(251, 191, 36, 0.8)',
-                    window.APP_CONSTANTS?.CHART_COLORS?.INFO || 'rgba(59, 130, 246, 0.8)',
-                    window.APP_CONSTANTS?.CHART_COLORS?.DANGER || 'rgba(239, 68, 68, 0.8)'
-                ],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        padding: 10,
-                        font: {
-                            size: 12
-                        }
-                    }
-                }
-            }
-        }
-    });
+            data: [completed, pending, inProgress, cancelled],
+            backgroundColor: chartUtils.getStatusChartColors(),
+            existingChart: window.statusChart
+        });
     } catch (error) {
         console.error('Error loading status chart:', error);
     }
 }
 
 async function loadRecentActivities() {
-    try {
-        // Get recent deliveries
-        const response = await fetch(`${API_BASE}/deliveries?page_size=5&order_by=created_at&order_desc=true`);
-        const data = await response.json();
+    // Get recent deliveries
+    const data = await api.get('/deliveries?page_size=5&order_by=created_at&order_desc=true', {
+        skipNotification: true
+    }).catch(() => null);
+    
+    const container = document.getElementById('recent-activities');
+    if (!container) return;
+    
+    container.innerHTML = '<h3 class="text-lg font-semibold mb-4">最近活動</h3>';
+    
+    if (data && data.items && data.items.length > 0) {
+        const list = document.createElement('div');
+        list.className = 'space-y-2';
         
-        const container = document.getElementById('recent-activities');
-        if (!container) return;
-        
-        container.innerHTML = '<h3 class="text-lg font-semibold mb-4">最近活動</h3>';
-        
-        if (data.items && data.items.length > 0) {
-            const list = document.createElement('div');
-            list.className = 'space-y-2';
+        data.items.forEach(delivery => {
+            const item = document.createElement('div');
+            item.className = 'flex items-center justify-between p-3 bg-gray-50 rounded';
             
-            data.items.forEach(delivery => {
-                const item = document.createElement('div');
-                item.className = 'flex items-center justify-between p-3 bg-gray-50 rounded';
-                
-                const statusColors = {
-                    'pending': 'text-yellow-600',
-                    'assigned': 'text-blue-600',
-                    'in_progress': 'text-purple-600',
-                    'completed': 'text-green-600',
-                    'cancelled': 'text-red-600'
-                };
-                
-                item.innerHTML = `
-                    <div>
-                        <p class="font-medium">${delivery.order_number}</p>
-                        <p class="text-sm text-gray-600">${delivery.client_name || '未知客戶'}</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-sm ${statusColors[delivery.status] || 'text-gray-600'}">${delivery.status_display || delivery.status}</p>
-                        <p class="text-xs text-gray-500">${formatDateTime(delivery.created_at)}</p>
-                    </div>
-                `;
-                
-                list.appendChild(item);
-            });
+            const statusColors = {
+                'pending': 'text-yellow-600',
+                'assigned': 'text-blue-600',
+                'in_progress': 'text-purple-600',
+                'completed': 'text-green-600',
+                'cancelled': 'text-red-600'
+            };
             
-            container.appendChild(list);
-        } else {
-            container.innerHTML += '<p class="text-gray-500">暫無最近活動</p>';
-        }
-    } catch (error) {
-        console.error('Error loading recent activities:', error);
+            item.innerHTML = `
+                <div>
+                    <p class="font-medium">${delivery.order_number}</p>
+                    <p class="text-sm text-gray-600">${delivery.client_name || '未知客戶'}</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm ${statusColors[delivery.status] || 'text-gray-600'}">${delivery.status_display || delivery.status}</p>
+                    <p class="text-xs text-gray-500">${formatDateTime(delivery.created_at)}</p>
+                </div>
+            `;
+            
+            list.appendChild(item);
+        });
+        
+        container.appendChild(list);
+    } else {
+        container.innerHTML += '<p class="text-gray-500">暫無最近活動</p>';
     }
 }
 
@@ -1511,9 +1553,11 @@ function showNotification(message, type = 'info') {
 
 // Enhanced client functions
 async function viewClient(clientCode) {
-    try {
-        const response = await fetch(`${API_BASE}/clients/by-code/${clientCode}`);
-        const client = await response.json();
+    const client = await api.get(`/clients/by-code/${clientCode}`, {
+        errorMessage: '載入客戶資料失敗'
+    }).catch(() => null);
+    
+    if (!client) return;
         
         // Create modal content with tabs
         const modalContent = `
@@ -1598,10 +1642,6 @@ async function viewClient(clientCode) {
         
         // Store client code for deliveries loading
         window.currentViewingClientCode = clientCode;
-        
-    } catch (error) {
-        showNotification('載入客戶資料失敗', 'error');
-    }
 }
 
 // Tab switching function
@@ -1634,36 +1674,36 @@ window.switchClientTab = switchClientTab;
 
 // Load client deliveries
 async function loadClientDeliveries(clientCode, page = 1) {
-    try {
-        const loadingDiv = document.getElementById('client-deliveries-loading');
-        const containerDiv = document.getElementById('client-deliveries-container');
-        
-        // Show loading
-        loadingDiv.classList.remove('hidden');
-        containerDiv.classList.add('hidden');
-        
-        // Fetch deliveries
-        const response = await fetch(`${API_BASE}/clients/by-code/${clientCode}/deliveries?page=${page}&page_size=10`);
-        const data = await response.json();
-        
-        // Hide loading
-        loadingDiv.classList.add('hidden');
-        containerDiv.classList.remove('hidden');
-        
-        // Render deliveries
-        renderClientDeliveries(data, clientCode);
-        
-    } catch (error) {
-        console.error('Error loading client deliveries:', error);
-        document.getElementById('client-deliveries-loading').classList.add('hidden');
-        document.getElementById('client-deliveries-container').innerHTML = `
-            <div class="text-center py-8 text-red-600">
-                <i class="fas fa-exclamation-circle text-3xl mb-2"></i>
-                <p>載入配送紀錄失敗</p>
-            </div>
-        `;
-        document.getElementById('client-deliveries-container').classList.remove('hidden');
+    const loadingDiv = document.getElementById('client-deliveries-loading');
+    const containerDiv = document.getElementById('client-deliveries-container');
+    
+    // Show loading
+    if (loadingDiv) loadingDiv.classList.remove('hidden');
+    if (containerDiv) containerDiv.classList.add('hidden');
+    
+    // Fetch deliveries
+    const data = await api.get(`/clients/by-code/${clientCode}/deliveries?page=${page}&page_size=10`, {
+        skipNotification: true
+    }).catch(() => null);
+    
+    // Hide loading
+    if (loadingDiv) loadingDiv.classList.add('hidden');
+    if (containerDiv) containerDiv.classList.remove('hidden');
+    
+    if (!data) {
+        if (containerDiv) {
+            containerDiv.innerHTML = `
+                <div class="text-center py-8 text-red-600">
+                    <i class="fas fa-exclamation-circle text-3xl mb-2"></i>
+                    <p>載入配送紀錄失敗</p>
+                </div>
+            `;
+        }
+        return;
     }
+    
+    // Render deliveries if successful
+    renderClientDeliveries(data, clientCode);
 }
 
 // Render client deliveries
@@ -1812,68 +1852,60 @@ async function deleteClient(clientId) {
     await loadClients(currentClientPage);
 }
 
-// Modal function
+// Modal function - refactored to use html.modal utility
 function showModal(title, content, actions = '') {
-    const modal = document.createElement('div');
-    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-    modal.innerHTML = `
-        <div class="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold">${title}</h3>
-                <button onclick="this.closest('.fixed').remove()" class="text-gray-500 hover:text-gray-700">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="mb-4">
-                ${content}
-            </div>
-            <div class="flex justify-end gap-2">
-                ${actions || '<button onclick="this.closest(\'.fixed\').remove()" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">關閉</button>'}
-            </div>
+    const modalId = `modal-${Date.now()}`;
+    const fullContent = `
+        <div class="mb-4">
+            ${content}
+        </div>
+        <div class="flex justify-end gap-2">
+            ${actions || `<button onclick="closeModal('${modalId}')" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">關閉</button>`}
         </div>
     `;
     
-    document.body.appendChild(modal);
+    const modalHtml = html.modal(title, fullContent, modalId);
+    const modalElement = document.createElement('div');
+    modalElement.innerHTML = modalHtml;
+    document.body.appendChild(modalElement.firstElementChild);
 }
 
 // Export functions for reports
 async function exportClients() {
-    try {
-        const params = new URLSearchParams(clientFilters);
-        params.append('export', 'csv');
-        
-        const response = await fetch(`${API_BASE}/clients?${params}`);
-        const blob = await response.blob();
-        
+    const params = new URLSearchParams(clientFilters);
+    params.append('export', 'csv');
+    
+    const blob = await api.get(`/clients?${params}`, {
+        successMessage: '匯出成功',
+        errorMessage: '匯出失敗'
+    }).catch(() => null);
+    
+    if (blob && blob instanceof Blob) {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `clients_${new Date().toISOString().split('T')[0]}.csv`;
         a.click();
-        
-        showNotification('匯出成功', 'success');
-    } catch (error) {
-        showNotification('匯出失敗', 'error');
+        window.URL.revokeObjectURL(url);
     }
 }
 
 async function exportDeliveries() {
-    try {
-        const params = new URLSearchParams(deliveryFilters);
-        params.append('export', 'csv');
-        
-        const response = await fetch(`${API_BASE}/deliveries?${params}`);
-        const blob = await response.blob();
-        
+    const params = new URLSearchParams(deliveryFilters);
+    params.append('export', 'csv');
+    
+    const blob = await api.get(`/deliveries?${params}`, {
+        successMessage: '匯出成功',
+        errorMessage: '匯出失敗'
+    }).catch(() => null);
+    
+    if (blob && blob instanceof Blob) {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `deliveries_${new Date().toISOString().split('T')[0]}.csv`;
         a.click();
-        
-        showNotification('匯出成功', 'success');
-    } catch (error) {
-        showNotification('匯出失敗', 'error');
+        window.URL.revokeObjectURL(url);
     }
 }
 
@@ -1892,9 +1924,11 @@ async function refreshStats() {
 
 // Edit functions for CRUD operations
 async function editClient(clientCode) {
-    try {
-        const response = await fetch(`${API_BASE}/clients/by-code/${clientCode}`);
-        const client = await response.json();
+    const client = await api.get(`/clients/by-code/${clientCode}`, {
+        errorMessage: '載入客戶資料失敗'
+    }).catch(() => null);
+    
+    if (!client) return;
         
         // Create a modal dialog for editing
         const modal = createEditModal('編輯客戶', `
@@ -1943,30 +1977,14 @@ async function editClient(clientCode) {
             
             const formData = new FormData(form);
             
-            // Define validation rules (client_code is readonly so not validated)
-            const validationRules = {
-                name: { required: true, type: 'name', options: { minLength: 2, maxLength: 100 } },
-                invoice_title: { required: false, type: 'name', options: { minLength: 2, maxLength: 100 } },
-                tax_id: { required: false, type: 'custom', validator: (value) => {
-                    if (!value) return { isValid: true, message: '' };
-                    if (!/^\d{8}$/.test(value)) {
-                        return { isValid: false, message: '統一編號必須是8位數字' };
-                    }
-                    return { isValid: true, message: '' };
-                }},
-                contact_person: { required: false, type: 'name', options: { minLength: 2, maxLength: 50 } },
-                address: { required: true, type: 'address' },
-                district: { required: false, type: 'name', options: { minLength: 2, maxLength: 50 } }
-            };
-            
             // Get form data
             const rawData = {};
             for (let [key, value] of formData.entries()) {
                 rawData[key] = value;
             }
             
-            // Validate form data
-            const validationResult = ValidationUtils.validateForm(rawData, validationRules);
+            // Validate form data using global validation rules
+            const validationResult = ValidationUtils.validateForm(rawData, validationRules.client);
             
             if (!validationResult.isValid) {
                 ValidationUtils.displayFormErrors(form, validationResult.errors);
@@ -1996,17 +2014,14 @@ async function editClient(clientCode) {
                 loadClients();
             }
         });
-        
-    } catch (error) {
-        console.error('Error editing client:', error);
-        showNotification('載入客戶資料失敗', 'error');
-    }
 }
 
 async function editDriver(driverId) {
-    try {
-        const response = await fetch(`${API_BASE}/drivers/${driverId}`);
-        const driver = await response.json();
+    const driver = await api.get(`/drivers/${driverId}`, {
+        errorMessage: '載入司機資料失敗'
+    }).catch(() => null);
+    
+    if (!driver) return;
         
         const modal = createEditModal('編輯司機', `
             <form id="edit-driver-form">
@@ -2056,16 +2071,14 @@ async function editDriver(driverId) {
             }
         });
         
-    } catch (error) {
-        console.error('Error editing driver:', error);
-        showNotification('載入司機資料失敗', 'error');
-    }
 }
 
 async function editVehicle(vehicleId) {
-    try {
-        const response = await fetch(`${API_BASE}/vehicles/${vehicleId}`);
-        const vehicle = await response.json();
+    const vehicle = await api.get(`/vehicles/${vehicleId}`, {
+        errorMessage: '載入車輛資料失敗'
+    }).catch(() => null);
+    
+    if (!vehicle) return;
         
         const modal = createEditModal('編輯車輛', `
             <form id="edit-vehicle-form">
@@ -2119,35 +2132,29 @@ async function editVehicle(vehicleId) {
                 loadVehicles();
             }
         });
-        
-    } catch (error) {
-        console.error('Error editing vehicle:', error);
-        showNotification('載入車輛資料失敗', 'error');
-    }
 }
 
 // Helper function to create edit modal
 function createEditModal(title, content) {
-    const modal = document.createElement('div');
-    modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50';
-    modal.innerHTML = `
-        <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
-            <div class="px-6 py-4 border-b">
-                <h3 class="text-lg font-semibold">${title}</h3>
-            </div>
-            <div class="px-6 py-4">
-                ${content}
-            </div>
-            <div class="px-6 py-4 border-t flex justify-end space-x-2">
-                <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
-                    取消
-                </button>
-                <button id="confirm-btn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-                    確認
-                </button>
-            </div>
+    const modalId = `modal-${Date.now()}`;
+    const fullContent = `
+        <div class="py-4">
+            ${content}
+        </div>
+        <div class="pt-4 border-t flex justify-end space-x-2">
+            <button onclick="closeModal('${modalId}')" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
+                取消
+            </button>
+            <button id="confirm-btn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                確認
+            </button>
         </div>
     `;
+    
+    const modalHtml = html.modal(title, fullContent, modalId);
+    const modalElement = document.createElement('div');
+    modalElement.innerHTML = modalHtml;
+    const modal = modalElement.firstElementChild;
     
     document.body.appendChild(modal);
     return modal;
@@ -2170,14 +2177,12 @@ async function showAddDeliveryModal() {
             const clientSelect = form.querySelector('select[name="client_id"]');
             if (clientSelect && allClients.length === 0) {
                 // Load clients if not already loaded
-                try {
-                    const response = await fetch(`${API_BASE}/clients?limit=1000`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        allClients = data.items || [];
-                    }
-                } catch (error) {
-                    console.error('Error loading clients:', error);
+                const data = await api.get('/clients?limit=1000', { 
+                    skipNotification: true 
+                }).catch(() => null);
+                
+                if (data) {
+                    allClients = data.items || [];
                 }
             }
             
@@ -2321,6 +2326,55 @@ async function assignDelivery(deliveryId) {
         }
     });
 }
+
+// Form handler utility
+const form = {
+    setup(formId, endpoint, options = {}) {
+        const formElement = document.getElementById(formId);
+        if (!formElement) {
+            console.error(`Form with id '${formId}' not found`);
+            return;
+        }
+        
+        formElement.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(formElement);
+            const rawData = {};
+            for (let [key, value] of formData.entries()) {
+                rawData[key] = value;
+            }
+            
+            // Validate if rules provided
+            if (options.validationRules) {
+                const validationResult = ValidationUtils.validateForm(rawData, options.validationRules);
+                if (!validationResult.isValid) {
+                    ValidationUtils.displayFormErrors(formElement, validationResult.errors);
+                    showNotification('請修正表單錯誤', 'error');
+                    return;
+                }
+            }
+            
+            // Transform data if transformer provided
+            const data = options.transform ? options.transform(rawData) : rawData;
+            
+            // Make API call
+            try {
+                const method = options.method || 'POST';
+                const result = await api[method.toLowerCase()](endpoint, data, {
+                    successMessage: options.successMessage
+                });
+                
+                if (result && options.onSuccess) {
+                    options.onSuccess(result);
+                }
+            } catch (error) {
+                console.error('Form submission error:', error);
+                showNotification(options.errorMessage || '操作失敗', 'error');
+            }
+        });
+    }
+};
 
 // Setup form handlers
 function setupFormHandlers() {
@@ -2556,11 +2610,11 @@ function updateDriverOptions() {
 
 // View driver details
 async function viewDriverDetails(driverId) {
-    try {
-        const response = await fetch(`${API_BASE}/drivers/${driverId}`);
-        if (!response.ok) throw new Error('Failed to fetch driver details');
-        
-        const driver = await response.json();
+    const driver = await api.get(`/drivers/${driverId}`, {
+        errorMessage: '載入司機資料失敗'
+    }).catch(() => null);
+    
+    if (!driver) return;
         
         const modalContent = `
             <div class="grid grid-cols-2 gap-4">
@@ -2623,57 +2677,55 @@ async function viewDriverDetails(driverId) {
             </div>
         `;
         
-        const modal = createModal(`
-            <h2 class="text-xl font-bold mb-4">司機詳細資料</h2>
+        const fullContent = `
             ${modalContent}
             <div class="mt-6 flex justify-end">
                 <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
                     關閉
                 </button>
             </div>
-        `);
-    } catch (error) {
-        showNotification('無法載入司機資料', 'error');
-    }
+        `;
+        
+        const modal = createModal(fullContent, '司機詳細資料');
 }
 
 // Toggle driver availability
 async function toggleDriverAvailability(driverId) {
-    try {
-        // Get current driver data
-        const response = await fetch(`${API_BASE}/drivers/${driverId}`);
-        if (!response.ok) throw new Error('Failed to fetch driver');
-        
-        const driver = await response.json();
-        const newAvailability = !driver.is_available;
-        
-        if (!confirm(`確定要${newAvailability ? '啟用' : '停用'}此司機嗎？`)) return;
-        
-        const updateResponse = await fetch(`${API_BASE}/drivers/${driverId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ is_available: newAvailability })
-        });
-        
-        if (updateResponse.ok) {
-            showNotification(`司機已${newAvailability ? '啟用' : '停用'}`, 'success');
-            loadDrivers();
-        } else {
-            throw new Error('Update failed');
-        }
-    } catch (error) {
-        showNotification('更新失敗: ' + error.message, 'error');
+    // Get current driver data
+    const driver = await api.get(`/drivers/${driverId}`, {
+        skipNotification: true
+    }).catch(() => null);
+    
+    if (!driver) {
+        showNotification('無法載入司機資料', 'error');
+        return;
+    }
+    
+    const newAvailability = !driver.is_available;
+    
+    if (!confirm(`確定要${newAvailability ? '啟用' : '停用'}此司機嗎？`)) return;
+    
+    const result = await api.put(`/drivers/${driverId}`, { 
+        is_available: newAvailability 
+    }, {
+        successMessage: `司機已${newAvailability ? '啟用' : '停用'}`,
+        errorMessage: '更新失敗'
+    }).catch(() => null);
+    
+    if (result !== null) {
+        loadDrivers();
     }
 }
 
 // View driver deliveries
 async function viewDriverDeliveries(driverId) {
-    try {
-        const response = await fetch(`${API_BASE}/deliveries?driver_id=${driverId}&limit=50`);
-        if (!response.ok) throw new Error('Failed to fetch deliveries');
-        
-        const data = await response.json();
-        const deliveries = data.items || [];
+    const data = await api.get(`/deliveries?driver_id=${driverId}&limit=50`, {
+        errorMessage: '載入配送記錄失敗'
+    }).catch(() => null);
+    
+    if (!data) return;
+    
+    const deliveries = data.items || [];
         
         let tableContent = '';
         if (deliveries.length === 0) {
@@ -2709,27 +2761,25 @@ async function viewDriverDeliveries(driverId) {
             `;
         }
         
-        const modal = createModal(`
-            <h2 class="text-xl font-bold mb-4">司機配送記錄</h2>
+        const fullContent = `
             ${tableContent}
             <div class="mt-6 flex justify-end">
                 <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
                     關閉
                 </button>
             </div>
-        `);
-    } catch (error) {
-        showNotification('無法載入配送記錄', 'error');
-    }
+        `;
+        
+        const modal = createModal(fullContent, '司機配送記錄');
 }
 
 // View vehicle details
 async function viewVehicleDetails(vehicleId) {
-    try {
-        const response = await fetch(`${API_BASE}/vehicles/${vehicleId}`);
-        if (!response.ok) throw new Error('Failed to fetch vehicle details');
-        
-        const vehicle = await response.json();
+    const vehicle = await api.get(`/vehicles/${vehicleId}`, {
+        errorMessage: '載入車輛資料失敗'
+    }).catch(() => null);
+    
+    if (!vehicle) return;
         
         const modalContent = `
             <div class="grid grid-cols-2 gap-4">
@@ -2786,27 +2836,25 @@ async function viewVehicleDetails(vehicleId) {
             </div>
         `;
         
-        const modal = createModal(`
-            <h2 class="text-xl font-bold mb-4">車輛詳細資料</h2>
+        const fullContent = `
             ${modalContent}
             <div class="mt-6 flex justify-end">
                 <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
                     關閉
                 </button>
             </div>
-        `);
-    } catch (error) {
-        showNotification('無法載入車輛資料', 'error');
-    }
+        `;
+        
+        const modal = createModal(fullContent, '車輛詳細資料');
 }
 
 // View delivery details
 async function viewDeliveryDetails(deliveryId) {
-    try {
-        const response = await fetch(`${API_BASE}/deliveries/${deliveryId}`);
-        if (!response.ok) throw new Error('Failed to fetch delivery details');
-        
-        const delivery = await response.json();
+    const delivery = await api.get(`/deliveries/${deliveryId}`, {
+        errorMessage: '載入配送資料失敗'
+    }).catch(() => null);
+    
+    if (!delivery) return;
         
         const modalContent = `
             <div class="grid grid-cols-2 gap-4">
@@ -2867,8 +2915,7 @@ async function viewDeliveryDetails(deliveryId) {
             </div>
         `;
         
-        const modal = createModal(`
-            <h2 class="text-xl font-bold mb-4">配送單詳細資料</h2>
+        const fullContent = `
             ${modalContent}
             <div class="mt-6 flex justify-end gap-2">
                 ${delivery.status === 'pending' ? `
@@ -2883,10 +2930,9 @@ async function viewDeliveryDetails(deliveryId) {
                     關閉
                 </button>
             </div>
-        `);
-    } catch (error) {
-        showNotification('無法載入配送單資料', 'error');
-    }
+        `;
+        
+        const modal = createModal(fullContent, '配送單詳細資料');
 }
 
 // Assign driver to delivery
@@ -2909,7 +2955,6 @@ async function assignDriver(deliveryId) {
         ).join('');
         
         const modalContent = `
-            <h2 class="text-xl font-bold mb-4">指派司機</h2>
             <form id="assign-driver-form">
                 <div class="mb-4">
                     <label class="block text-sm font-medium text-gray-700 mb-2">選擇司機</label>
@@ -2929,7 +2974,7 @@ async function assignDriver(deliveryId) {
             </form>
         `;
         
-        const modal = createModal(modalContent);
+        const modal = createModal(modalContent, '指派司機');
         
         // Add form handler
         const form = modal.querySelector('#assign-driver-form');
@@ -3313,7 +3358,6 @@ document.getElementById('route-plan-form')?.addEventListener('submit', async (e)
 // Show optimization results
 function showOptimizationResults(result) {
     let modalContent = `
-        <h2 class="text-xl font-bold mb-4">路線規劃結果</h2>
         <div class="mb-4">
             <p class="text-green-600 font-medium">${result.message}</p>
             <p class="text-sm text-gray-600 mt-2">優化耗時: ${result.optimization_time_seconds?.toFixed(2) || 0} 秒</p>
@@ -3379,7 +3423,7 @@ function showOptimizationResults(result) {
         </div>
     `;
     
-    const modal = createModal(modalContent);
+    const modal = createModal(modalContent, '路線規劃結果');
     document.body.appendChild(modal);
 }
 
@@ -3502,7 +3546,6 @@ async function showRouteMap(routeId) {
         // For now, just show the data
         // Display map data in a modal
         const modalContent = `
-            <h2 class="text-xl font-bold mb-4">路線地圖</h2>
             <div class="mb-4">
                 <p class="text-sm text-gray-600">路線ID: ${mapData.route_id}</p>
                 <p class="text-sm text-gray-600">中心座標: ${mapData.center_lat.toFixed(6)}, ${mapData.center_lng.toFixed(6)}</p>
@@ -3526,7 +3569,7 @@ async function showRouteMap(routeId) {
             </div>
         `;
         
-        const modal = createModal(modalContent);
+        const modal = createModal(modalContent, '路線地圖');
         document.body.appendChild(modal);
         
     } catch (error) {
@@ -3618,7 +3661,7 @@ async function editRoute(routeId) {
             </form>
         `;
         
-        const modal = createModal(modalContent);
+        const modal = createModal(modalContent, '編輯路線');
         document.body.appendChild(modal);
         
         // Load drivers and vehicles if not already loaded
@@ -3885,16 +3928,23 @@ function closeModal(modalOrId) {
     }
 }
 
-// Create modal helper function
-function createModal(content) {
-    const modal = document.createElement('div');
-    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-    modal.innerHTML = `
-        <div class="bg-white rounded-lg p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            ${content}
-        </div>
-    `;
-    return modal;
+// Create modal helper function - refactored to use html.modal utility
+function createModal(content, title = '') {
+    const modalId = `modal-${Date.now()}`;
+    // Extract title from content if it contains an h2
+    let modalTitle = title;
+    let modalContent = content;
+    
+    const titleMatch = content.match(/<h2[^>]*>(.*?)<\/h2>/);
+    if (titleMatch && !title) {
+        modalTitle = titleMatch[1];
+        modalContent = content.replace(/<h2[^>]*>.*?<\/h2>/, '');
+    }
+    
+    const modalHtml = html.modal(modalTitle, modalContent, modalId);
+    const modalElement = document.createElement('div');
+    modalElement.innerHTML = modalHtml;
+    return modalElement.firstElementChild;
 }
 
 // Make functions available globally for onclick handlers
@@ -4269,7 +4319,6 @@ async function viewScheduleDetails(date) {
         const metrics = await response.json();
         
         let modalContent = `
-            <h2 class="text-xl font-bold mb-4">排程詳情 - ${formatDate(date)}</h2>
             <div class="space-y-4">
         `;
         
@@ -4357,7 +4406,7 @@ async function viewScheduleDetails(date) {
             </div>
         `;
         
-        const modal = createModal('排程詳情', modalContent);
+        const modal = createModal(modalContent, `排程詳情 - ${formatDate(date)}`);
         document.body.appendChild(modal);
         
     } catch (error) {
