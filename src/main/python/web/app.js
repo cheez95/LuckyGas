@@ -311,7 +311,7 @@ const table = {
     
     actionButtons(buttons) {
         return buttons.map(btn => 
-            `<button class="${btn.class}" title="${btn.title}" onclick="${btn.onclick}">
+            `<button class="${btn.class}" title="${btn.title}" ${btn.dataAction ? `data-action="${btn.dataAction}"` : ''} ${btn.dataAttrs || ''}>
                 <i class="${btn.icon}"></i>
             </button>`
         ).join('');
@@ -324,12 +324,12 @@ const html = {
         return SecurityUtils.escapeHtml(text);
     },
     
-    button(text, className = 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700', onclick = '') {
-        return `<button class="${className}" ${onclick ? `onclick="${onclick}"` : ''}>${this.escape(text)}</button>`;
+    button(text, className = 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700', dataAction = '', dataAttrs = '') {
+        return `<button class="${className}" ${dataAction ? `data-action="${dataAction}"` : ''} ${dataAttrs}>${this.escape(text)}</button>`;
     },
     
-    iconButton(icon, title, className = 'text-blue-600 hover:text-blue-900', onclick = '') {
-        return `<button class="${className}" title="${this.escape(title)}" ${onclick ? `onclick="${onclick}"` : ''}>
+    iconButton(icon, title, className = 'text-blue-600 hover:text-blue-900', dataAction = '', dataAttrs = '') {
+        return `<button class="${className}" title="${this.escape(title)}" ${dataAction ? `data-action="${dataAction}"` : ''} ${dataAttrs}>
             <i class="${icon}"></i>
         </button>`;
     },
@@ -341,7 +341,7 @@ const html = {
                 <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-auto">
                     <div class="px-6 py-4 border-b flex justify-between items-center">
                         <h3 class="text-lg font-semibold">${this.escape(title)}</h3>
-                        <button onclick="closeModal('${id}')" class="text-gray-400 hover:text-gray-600">
+                        <button data-action="closeModal" data-modal-id="${id}" class="text-gray-400 hover:text-gray-600">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
@@ -374,9 +374,71 @@ const html = {
         return `<select name="${name}" class="${className}">${optionsHtml}</select>`;
     },
     
-    input(type, name, value = '', placeholder = '', className = 'w-full border rounded px-3 py-2') {
+    input(type, name, value = '', placeholder = '', className = 'w-full border rounded px-3 py-2', extraAttrs = '') {
         return `<input type="${type}" name="${name}" value="${this.escape(value)}" 
-                placeholder="${this.escape(placeholder)}" class="${className}">`;
+                placeholder="${this.escape(placeholder)}" class="${className}" ${extraAttrs}>`;
+    },
+    
+    formField(label, name, type = 'text', value = '', options = {}) {
+        const {
+            required = false,
+            placeholder = '',
+            readonly = false,
+            className = 'w-full px-3 py-2 border rounded-md',
+            labelClass = 'block text-sm font-medium text-gray-700 mb-1',
+            containerClass = '',
+            selectOptions = [],
+            error = ''
+        } = options;
+        
+        let inputHtml = '';
+        if (type === 'select') {
+            inputHtml = this.select(name, selectOptions, value, className + (readonly ? ' bg-gray-100' : ''));
+        } else {
+            const attrs = `${required ? 'required' : ''} ${readonly ? 'readonly' : ''}`;
+            inputHtml = this.input(type, name, value, placeholder, className + (readonly ? ' bg-gray-100' : ''), attrs);
+        }
+        
+        return `
+            <div class="${containerClass}">
+                <label class="${labelClass}">${this.escape(label)}</label>
+                ${inputHtml}
+                ${error ? `<p class="text-red-500 text-xs mt-1">${this.escape(error)}</p>` : ''}
+            </div>
+        `;
+    },
+    
+    statusBadge(isActive, activeText = '啟用', inactiveText = '停用', activeClass = 'bg-green-100 text-green-800', inactiveClass = 'bg-red-100 text-red-800') {
+        return `<span class="px-2 py-1 text-xs rounded-full ${isActive ? activeClass : inactiveClass}">${isActive ? activeText : inactiveText}</span>`;
+    },
+    
+    modalFooter(modalId, actions = null, cancelText = '取消', confirmText = '確認', showBorder = true) {
+        const borderClass = showBorder ? 'pt-4 border-t' : '';
+        return `
+            <div class="${borderClass} flex justify-end ${showBorder ? 'space-x-2' : 'gap-2'}">
+                ${actions || `
+                    <button data-action="closeModal" data-modal-id="${modalId}" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
+                        ${this.escape(cancelText)}
+                    </button>
+                    <button id="confirm-btn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                        ${this.escape(confirmText)}
+                    </button>
+                `}
+            </div>
+        `;
+    },
+    
+    gridContainer(content, cols = 2, gap = 4, className = '') {
+        return `<div class="grid grid-cols-${cols} gap-${gap} ${className}">${content}</div>`;
+    },
+    
+    downloadBlob(blob, filename) {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        window.URL.revokeObjectURL(url);
     }
 };
 
@@ -496,6 +558,145 @@ const validationRules = {
     }
 };
 
+// Event Delegation System
+const eventDelegation = {
+    init() {
+        document.addEventListener('click', this.handleClick.bind(this));
+    },
+    
+    handleClick(e) {
+        // Handle buttons with data-action
+        const actionButton = e.target.closest('[data-action]');
+        if (actionButton) {
+            e.preventDefault();
+            const action = actionButton.dataset.action;
+            const data = actionButton.dataset;
+            
+            // Route to appropriate handler
+            switch (action) {
+                // Modal operations
+                case 'closeModal':
+                    if (window.closeModal) {
+                        const modal = actionButton.closest('.fixed[id]');
+                        if (modal) window.closeModal(modal.id);
+                        else if (data.modalId) window.closeModal(data.modalId);
+                    }
+                    break;
+                    
+                // Client operations
+                case 'editClient':
+                    if (window.editClient && data.code) window.editClient(data.code);
+                    break;
+                case 'switchClientTab':
+                    if (window.switchClientTab && data.tab) window.switchClientTab(data.tab);
+                    break;
+                case 'addClientToRoute':
+                    if (window.addClientToRoute) {
+                        window.addClientToRoute(
+                            parseInt(data.clientId),
+                            data.clientCode,
+                            data.clientName,
+                            data.clientAddress
+                        );
+                    }
+                    break;
+                case 'removeClientFromRoute':
+                    if (window.removeClientFromRoute && data.index) {
+                        window.removeClientFromRoute(parseInt(data.index));
+                    }
+                    break;
+                    
+                // Delivery operations
+                case 'viewDelivery':
+                    if (window.viewDelivery && data.id) window.viewDelivery(parseInt(data.id));
+                    break;
+                case 'assignDriver':
+                    if (window.assignDriver && data.deliveryId) {
+                        window.assignDriver(parseInt(data.deliveryId));
+                    }
+                    break;
+                case 'updateDeliveryStatus':
+                    if (window.updateDeliveryStatus && data.deliveryId && data.status) {
+                        window.updateDeliveryStatus(parseInt(data.deliveryId), data.status);
+                    }
+                    break;
+                    
+                // Route operations
+                case 'viewRoute':
+                    if (window.viewRoute && data.routeId) window.viewRoute(parseInt(data.routeId));
+                    break;
+                case 'editRoute':
+                    if (window.editRoute && data.routeId) window.editRoute(parseInt(data.routeId));
+                    break;
+                case 'deleteRoute':
+                    if (window.deleteRoute && data.routeId) window.deleteRoute(parseInt(data.routeId));
+                    break;
+                    
+                // Driver/Vehicle operations
+                case 'editDriver':
+                    if (window.editDriver && data.driverId) window.editDriver(parseInt(data.driverId));
+                    break;
+                case 'editVehicle':
+                    if (window.editVehicle && data.vehicleId) window.editVehicle(parseInt(data.vehicleId));
+                    break;
+                    
+                // Schedule operations
+                case 'viewScheduleDetails':
+                    if (window.viewScheduleDetails && data.date) window.viewScheduleDetails(data.date);
+                    break;
+                case 'applySchedule':
+                    if (window.applySchedule && data.date) window.applySchedule(data.date);
+                    break;
+                    
+                // Pagination operations
+                case 'loadDeliveries':
+                    if (window.loadDeliveries && data.page) window.loadDeliveries(parseInt(data.page));
+                    break;
+                case 'loadClients':
+                    if (window.loadClients && data.page) window.loadClients(parseInt(data.page));
+                    break;
+                case 'loadClientDeliveries':
+                    if (window.loadClientDeliveries && data.clientCode && data.page) {
+                        window.loadClientDeliveries(data.clientCode, parseInt(data.page));
+                    }
+                    break;
+                case 'loadRoutes':
+                    if (window.loadRoutes && data.page) window.loadRoutes(parseInt(data.page));
+                    break;
+                case 'loadDrivers':
+                    if (window.loadDrivers && data.page) window.loadDrivers(parseInt(data.page));
+                    break;
+                case 'loadVehicles':
+                    if (window.loadVehicles && data.page) window.loadVehicles(parseInt(data.page));
+                    break;
+            }
+        }
+        
+        // Handle table row clicks
+        const deliveryRow = e.target.closest('tr[data-delivery-id]');
+        if (deliveryRow && !e.target.closest('button')) {
+            e.preventDefault();
+            const deliveryId = parseInt(deliveryRow.dataset.deliveryId);
+            if (window.viewDelivery) window.viewDelivery(deliveryId);
+        }
+        
+        // Handle client selection for routes
+        const clientRow = e.target.closest('div[data-client-select]');
+        if (clientRow && !e.target.closest('button')) {
+            e.preventDefault();
+            const data = clientRow.dataset;
+            if (window.addClientToRoute) {
+                window.addClientToRoute(
+                    parseInt(data.clientId),
+                    data.clientCode,
+                    data.clientName,
+                    data.clientAddress
+                );
+            }
+        }
+    }
+};
+
 // State
 let currentPage = window.APP_CONSTANTS?.PAGES?.DASHBOARD || 'dashboard';
 let currentClientPage = 1;
@@ -540,6 +741,9 @@ let routeFilters = {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize event delegation
+    eventDelegation.init();
+    
     // Set current date in header
     const dateElement = document.getElementById('currentDate');
     if (dateElement) {
@@ -1343,12 +1547,12 @@ function updatePagination(section, currentPage, totalPages, totalItems) {
     // First and Previous buttons
     if (currentPage > 1) {
         container.innerHTML += `
-            <button onclick="load${capitalize(section)}(1)" 
+            <button data-action="load${capitalize(section)}" data-page="1" 
                     class="px-3 py-1 border rounded hover:bg-gray-100 ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}"
                     ${currentPage === 1 ? 'disabled' : ''}>
                 <i class="fas fa-angle-double-left"></i>
             </button>
-            <button onclick="load${capitalize(section)}(${currentPage - 1})" 
+            <button data-action="load${capitalize(section)}" data-page="${currentPage - 1}" 
                     class="px-3 py-1 border rounded hover:bg-gray-100">
                 <i class="fas fa-angle-left"></i>
             </button>
@@ -1372,7 +1576,7 @@ function updatePagination(section, currentPage, totalPages, totalItems) {
         }
         
         container.innerHTML += `
-            <button onclick="load${capitalize(section)}(${page})" 
+            <button data-action="load${capitalize(section)}" data-page="${page}" 
                     class="px-3 py-1 border rounded ${page === currentPage ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'}">
                 ${page}
             </button>
@@ -1384,11 +1588,11 @@ function updatePagination(section, currentPage, totalPages, totalItems) {
     // Next and Last buttons
     if (currentPage < totalPages) {
         container.innerHTML += `
-            <button onclick="load${capitalize(section)}(${currentPage + 1})" 
+            <button data-action="load${capitalize(section)}" data-page="${currentPage + 1}" 
                     class="px-3 py-1 border rounded hover:bg-gray-100">
                 <i class="fas fa-angle-right"></i>
             </button>
-            <button onclick="load${capitalize(section)}(${totalPages})" 
+            <button data-action="load${capitalize(section)}" data-page="${totalPages}" 
                     class="px-3 py-1 border rounded hover:bg-gray-100 ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}"
                     ${currentPage === totalPages ? 'disabled' : ''}>
                 <i class="fas fa-angle-double-right"></i>
@@ -1565,11 +1769,11 @@ async function viewClient(clientCode) {
                 <!-- Tabs -->
                 <div class="border-b border-gray-200 mb-4">
                     <nav class="-mb-px flex space-x-8">
-                        <button onclick="switchClientTab('info')" id="client-info-tab" 
+                        <button data-action="switchClientTab" data-tab="info" id="client-info-tab" 
                                 class="client-tab-btn active py-2 px-1 border-b-2 border-blue-500 font-medium text-sm text-blue-600">
                             客戶資訊
                         </button>
-                        <button onclick="switchClientTab('deliveries')" id="client-deliveries-tab" 
+                        <button data-action="switchClientTab" data-tab="deliveries" id="client-deliveries-tab" 
                                 class="client-tab-btn py-2 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">
                             配送紀錄
                         </button>
@@ -1759,7 +1963,7 @@ function renderClientDeliveries(data, clientCode) {
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     ${data.items.map(delivery => `
-                        <tr class="hover:bg-gray-50 cursor-pointer transition-colors" onclick="viewDelivery(${delivery.id})">
+                        <tr class="hover:bg-gray-50 cursor-pointer transition-colors" data-delivery-id="${delivery.id}">
                             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                                 #${delivery.order_number || delivery.id}
                             </td>
@@ -1789,7 +1993,7 @@ function renderClientDeliveries(data, clientCode) {
             <div class="flex justify-center mt-4">
                 <nav class="flex space-x-2">
                     ${data.page > 1 ? `
-                        <button onclick="loadClientDeliveries('${clientCode}', ${data.page - 1})" 
+                        <button data-action="loadClientDeliveries" data-client-code="${clientCode}" data-page="${data.page - 1}" 
                                 class="px-3 py-1 text-sm bg-white border rounded hover:bg-gray-50">
                             <i class="fas fa-chevron-left"></i>
                         </button>
@@ -1799,7 +2003,7 @@ function renderClientDeliveries(data, clientCode) {
                         const pageNum = i + 1;
                         const isActive = pageNum === data.page;
                         return `
-                            <button onclick="loadClientDeliveries('${clientCode}', ${pageNum})" 
+                            <button data-action="loadClientDeliveries" data-client-code="${clientCode}" data-page="${pageNum}" 
                                     class="px-3 py-1 text-sm ${isActive ? 'bg-blue-500 text-white' : 'bg-white text-gray-700'} border rounded hover:bg-gray-50">
                                 ${pageNum}
                             </button>
@@ -1807,7 +2011,7 @@ function renderClientDeliveries(data, clientCode) {
                     }).join('')}
                     
                     ${data.page < data.total_pages ? `
-                        <button onclick="loadClientDeliveries('${clientCode}', ${data.page + 1})" 
+                        <button data-action="loadClientDeliveries" data-client-code="${clientCode}" data-page="${data.page + 1}" 
                                 class="px-3 py-1 text-sm bg-white border rounded hover:bg-gray-50">
                             <i class="fas fa-chevron-right"></i>
                         </button>
@@ -1859,9 +2063,7 @@ function showModal(title, content, actions = '') {
         <div class="mb-4">
             ${content}
         </div>
-        <div class="flex justify-end gap-2">
-            ${actions || `<button onclick="closeModal('${modalId}')" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">關閉</button>`}
-        </div>
+        ${html.modalFooter(modalId, actions || html.button('關閉', 'px-4 py-2 bg-gray-200 rounded hover:bg-gray-300', 'closeModal', `data-modal-id="${modalId}"`), '', '', false)}
     `;
     
     const modalHtml = html.modal(title, fullContent, modalId);
@@ -1881,12 +2083,7 @@ async function exportClients() {
     }).catch(() => null);
     
     if (blob && blob instanceof Blob) {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `clients_${new Date().toISOString().split('T')[0]}.csv`;
-        a.click();
-        window.URL.revokeObjectURL(url);
+        html.downloadBlob(blob, `clients_${new Date().toISOString().split('T')[0]}.csv`);
     }
 }
 
@@ -1900,12 +2097,7 @@ async function exportDeliveries() {
     }).catch(() => null);
     
     if (blob && blob instanceof Blob) {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `deliveries_${new Date().toISOString().split('T')[0]}.csv`;
-        a.click();
-        window.URL.revokeObjectURL(url);
+        html.downloadBlob(blob, `deliveries_${new Date().toISOString().split('T')[0]}.csv`);
     }
 }
 
@@ -1934,37 +2126,19 @@ async function editClient(clientCode) {
         const modal = createEditModal('編輯客戶', `
             <form id="edit-client-form">
                 <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">客戶編號</label>
-                        <input type="text" name="client_code" value="${client.client_code || ''}" class="w-full px-3 py-2 border rounded-md bg-gray-100" readonly>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">客戶名稱</label>
-                        <input type="text" name="name" value="${client.name || ''}" class="w-full px-3 py-2 border rounded-md" required>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">發票抬頭</label>
-                        <input type="text" name="invoice_title" value="${client.invoice_title || ''}" class="w-full px-3 py-2 border rounded-md">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">聯絡人</label>
-                        <input type="text" name="contact_person" value="${client.contact_person || ''}" class="w-full px-3 py-2 border rounded-md">
-                    </div>
-                    <div class="col-span-2">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">地址</label>
-                        <input type="text" name="address" value="${client.address}" class="w-full px-3 py-2 border rounded-md" required>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">區域</label>
-                        <input type="text" name="district" value="${client.district || ''}" class="w-full px-3 py-2 border rounded-md">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">狀態</label>
-                        <select name="is_active" class="w-full px-3 py-2 border rounded-md">
-                            <option value="true" ${client.is_active ? 'selected' : ''}>啟用</option>
-                            <option value="false" ${!client.is_active ? 'selected' : ''}>停用</option>
-                        </select>
-                    </div>
+                    ${html.formField('客戶編號', 'client_code', 'text', client.client_code || '', { readonly: true, containerClass: 'div' })}
+                    ${html.formField('客戶名稱', 'name', 'text', client.name || '', { required: true, containerClass: 'div' })}
+                    ${html.formField('發票抬頭', 'invoice_title', 'text', client.invoice_title || '', { containerClass: 'div' })}
+                    ${html.formField('聯絡人', 'contact_person', 'text', client.contact_person || '', { containerClass: 'div' })}
+                    ${html.formField('地址', 'address', 'text', client.address, { required: true, containerClass: 'col-span-2' })}
+                    ${html.formField('區域', 'district', 'text', client.district || '', { containerClass: 'div' })}
+                    ${html.formField('狀態', 'is_active', 'select', client.is_active ? 'true' : 'false', {
+                        containerClass: 'div',
+                        selectOptions: [
+                            { value: 'true', text: '啟用' },
+                            { value: 'false', text: '停用' }
+                        ]
+                    })}
                 </div>
             </form>
         `);
@@ -2026,25 +2200,16 @@ async function editDriver(driverId) {
         const modal = createEditModal('編輯司機', `
             <form id="edit-driver-form">
                 <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">姓名</label>
-                        <input type="text" name="name" value="${driver.name}" class="w-full px-3 py-2 border rounded-md" required>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">電話</label>
-                        <input type="text" name="phone" value="${driver.phone || ''}" class="w-full px-3 py-2 border rounded-md">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">員工編號</label>
-                        <input type="text" name="employee_id" value="${driver.employee_id || ''}" class="w-full px-3 py-2 border rounded-md">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">狀態</label>
-                        <select name="is_active" class="w-full px-3 py-2 border rounded-md">
-                            <option value="true" ${driver.is_active ? 'selected' : ''}>在職</option>
-                            <option value="false" ${!driver.is_active ? 'selected' : ''}>離職</option>
-                        </select>
-                    </div>
+                    ${html.formField('姓名', 'name', 'text', driver.name, { required: true, containerClass: 'div' })}
+                    ${html.formField('電話', 'phone', 'text', driver.phone || '', { containerClass: 'div' })}
+                    ${html.formField('員工編號', 'employee_id', 'text', driver.employee_id || '', { containerClass: 'div' })}
+                    ${html.formField('狀態', 'is_active', 'select', driver.is_active ? 'true' : 'false', {
+                        containerClass: 'div',
+                        selectOptions: [
+                            { value: 'true', text: '在職' },
+                            { value: 'false', text: '離職' }
+                        ]
+                    })}
                 </div>
             </form>
         `);
@@ -2083,28 +2248,22 @@ async function editVehicle(vehicleId) {
         const modal = createEditModal('編輯車輛', `
             <form id="edit-vehicle-form">
                 <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">車牌號碼</label>
-                        <input type="text" name="plate_number" value="${vehicle.plate_number}" class="w-full px-3 py-2 border rounded-md" required>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">車輛類型</label>
-                        <select name="vehicle_type" class="w-full px-3 py-2 border rounded-md">
-                            <option value="1" ${vehicle.vehicle_type === 1 ? 'selected' : ''}>汽車</option>
-                            <option value="2" ${vehicle.vehicle_type === 2 ? 'selected' : ''}>機車</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">狀態</label>
-                        <select name="is_active" class="w-full px-3 py-2 border rounded-md">
-                            <option value="true" ${vehicle.is_active ? 'selected' : ''}>可用</option>
-                            <option value="false" ${!vehicle.is_active ? 'selected' : ''}>停用</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">上次保養日期</label>
-                        <input type="date" name="last_maintenance" value="${vehicle.last_maintenance || ''}" class="w-full px-3 py-2 border rounded-md">
-                    </div>
+                    ${html.formField('車牌號碼', 'plate_number', 'text', vehicle.plate_number, { required: true, containerClass: 'div' })}
+                    ${html.formField('車輛類型', 'vehicle_type', 'select', vehicle.vehicle_type, {
+                        containerClass: 'div',
+                        selectOptions: [
+                            { value: '1', text: '汽車' },
+                            { value: '2', text: '機車' }
+                        ]
+                    })}
+                    ${html.formField('狀態', 'is_active', 'select', vehicle.is_active ? 'true' : 'false', {
+                        containerClass: 'div',
+                        selectOptions: [
+                            { value: 'true', text: '可用' },
+                            { value: 'false', text: '停用' }
+                        ]
+                    })}
+                    ${html.formField('上次保養日期', 'last_maintenance', 'date', vehicle.last_maintenance || '', { containerClass: 'div' })}
                 </div>
             </form>
         `);
@@ -2141,14 +2300,7 @@ function createEditModal(title, content) {
         <div class="py-4">
             ${content}
         </div>
-        <div class="pt-4 border-t flex justify-end space-x-2">
-            <button onclick="closeModal('${modalId}')" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
-                取消
-            </button>
-            <button id="confirm-btn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-                確認
-            </button>
-        </div>
+        ${html.modalFooter(modalId)}
     `;
     
     const modalHtml = html.modal(title, fullContent, modalId);
@@ -2665,9 +2817,7 @@ async function viewDriverDetails(driverId) {
                 <div>
                     <p class="text-sm text-gray-600">狀態</p>
                     <p class="font-medium">
-                        <span class="px-2 py-1 text-xs rounded-full ${driver.is_available ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
-                            ${driver.is_available ? '可用' : '不可用'}
-                        </span>
+                        ${html.statusBadge(driver.is_available, '可用', '不可用', 'bg-green-100 text-green-800', 'bg-gray-100 text-gray-800')}
                     </p>
                 </div>
                 <div>
@@ -2680,7 +2830,7 @@ async function viewDriverDetails(driverId) {
         const fullContent = `
             ${modalContent}
             <div class="mt-6 flex justify-end">
-                <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
+                <button data-action="closeModal" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
                     關閉
                 </button>
             </div>
@@ -2764,7 +2914,7 @@ async function viewDriverDeliveries(driverId) {
         const fullContent = `
             ${tableContent}
             <div class="mt-6 flex justify-end">
-                <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
+                <button data-action="closeModal" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
                     關閉
                 </button>
             </div>
@@ -2839,7 +2989,7 @@ async function viewVehicleDetails(vehicleId) {
         const fullContent = `
             ${modalContent}
             <div class="mt-6 flex justify-end">
-                <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
+                <button data-action="closeModal" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
                     關閉
                 </button>
             </div>
@@ -2919,14 +3069,14 @@ async function viewDeliveryDetails(deliveryId) {
             ${modalContent}
             <div class="mt-6 flex justify-end gap-2">
                 ${delivery.status === 'pending' ? `
-                    <button onclick="assignDriver(${delivery.id})" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                    <button data-action="assignDriver" data-delivery-id="${delivery.id}" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
                         指派司機
                     </button>
                 ` : ''}
-                <button onclick="updateDeliveryStatus(${delivery.id}, '${delivery.status}')" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                <button data-action="updateDeliveryStatus" data-delivery-id="${delivery.id}" data-status="${delivery.status}" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
                     更新狀態
                 </button>
-                <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
+                <button data-action="closeModal" class="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
                     關閉
                 </button>
             </div>
@@ -2964,7 +3114,7 @@ async function assignDriver(deliveryId) {
                     </select>
                 </div>
                 <div class="flex justify-end gap-2">
-                    <button type="button" onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 text-gray-600 hover:text-gray-800">
+                    <button type="button" data-action="closeModal" class="px-4 py-2 text-gray-600 hover:text-gray-800">
                         取消
                     </button>
                     <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
@@ -3187,7 +3337,7 @@ function updateRoutePagination(total, currentPage, pageSize) {
     // Previous button
     if (currentPage > 1) {
         paginationHTML += `
-            <button onclick="loadRoutes(${currentPage - 1})" class="px-3 py-1 border rounded hover:bg-gray-100">
+            <button data-action="loadRoutes" data-page="${currentPage - 1}" class="px-3 py-1 border rounded hover:bg-gray-100">
                 <i class="fas fa-chevron-left"></i>
             </button>
         `;
@@ -3201,7 +3351,7 @@ function updateRoutePagination(total, currentPage, pageSize) {
             `;
         } else if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
             paginationHTML += `
-                <button onclick="loadRoutes(${i})" class="px-3 py-1 border rounded hover:bg-gray-100">${i}</button>
+                <button data-action="loadRoutes" data-page="${i}" class="px-3 py-1 border rounded hover:bg-gray-100">${i}</button>
             `;
         } else if (i === currentPage - 3 || i === currentPage + 3) {
             paginationHTML += `<span class="px-2">...</span>`;
@@ -3211,7 +3361,7 @@ function updateRoutePagination(total, currentPage, pageSize) {
     // Next button
     if (currentPage < totalPages) {
         paginationHTML += `
-            <button onclick="loadRoutes(${currentPage + 1})" class="px-3 py-1 border rounded hover:bg-gray-100">
+            <button data-action="loadRoutes" data-page="${currentPage + 1}" class="px-3 py-1 border rounded hover:bg-gray-100">
                 <i class="fas fa-chevron-right"></i>
             </button>
         `;
@@ -3381,7 +3531,7 @@ function showOptimizationResults(result) {
                                     預估時間: ${Math.floor(route.estimated_duration_minutes / 60)}小時${route.estimated_duration_minutes % 60}分鐘
                                 </p>
                             </div>
-                            <button onclick="viewRoute(${route.id})" class="text-blue-600 hover:text-blue-800">
+                            <button data-action="viewRoute" data-route-id="${route.id}" class="text-blue-600 hover:text-blue-800">
                                 <i class="fas fa-eye"></i> 檢視
                             </button>
                         </div>
@@ -3417,7 +3567,7 @@ function showOptimizationResults(result) {
     
     modalContent += `
         <div class="mt-6 flex justify-end">
-            <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+            <button data-action="closeModal" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
                 確定
             </button>
         </div>
@@ -3563,7 +3713,7 @@ async function showRouteMap(routeId) {
                 </div>
             </div>
             <div class="flex justify-end">
-                <button onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
+                <button data-action="closeModal" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
                     關閉
                 </button>
             </div>
@@ -3651,7 +3801,7 @@ async function editRoute(routeId) {
                 </div>
                 
                 <div class="flex justify-end gap-2 mt-6">
-                    <button type="button" onclick="closeModal(this.closest('.fixed'))" class="px-4 py-2 border rounded hover:bg-gray-100">
+                    <button type="button" data-action="closeModal" class="px-4 py-2 border rounded hover:bg-gray-100">
                         取消
                     </button>
                     <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
@@ -3795,7 +3945,7 @@ function displayAvailableClients(clients) {
     if (!container) return;
     
     container.innerHTML = clients.map(client => `
-        <div class="p-2 hover:bg-gray-50 cursor-pointer border-b" onclick="addClientToRoute(${client.id}, '${client.client_code}', '${client.name}', '${client.address}')">
+        <div class="p-2 hover:bg-gray-50 cursor-pointer border-b" data-client-select="true" data-client-id="${client.id}" data-client-code="${client.client_code}" data-client-name="${client.name}" data-client-address="${client.address}">
             <p class="font-medium text-sm">${client.client_code} - ${client.name}</p>
             <p class="text-xs text-gray-600">${client.address}</p>
         </div>
@@ -3832,7 +3982,7 @@ function updateSelectedClientsDisplay() {
                     <p class="font-medium text-sm">${index + 1}. ${client.code} - ${client.name}</p>
                     <p class="text-xs text-gray-600">${client.address}</p>
                 </div>
-                <button onclick="removeClientFromRoute(${index})" class="text-red-600 hover:text-red-800 ml-2">
+                <button data-action="removeClientFromRoute" data-index="${index}" class="text-red-600 hover:text-red-800 ml-2">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -4269,10 +4419,10 @@ function displaySchedulingResults(results, successCount, failCount) {
                             ` : ''}
                         </div>
                         <div class="flex gap-2">
-                            <button onclick="viewScheduleDetails('${result.date}')" class="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
+                            <button data-action="viewScheduleDetails" data-date="${result.date}" class="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
                                 查看詳情
                             </button>
-                            <button onclick="applySchedule('${result.date}')" class="text-sm bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">
+                            <button data-action="applySchedule" data-date="${result.date}" class="text-sm bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">
                                 套用排程
                             </button>
                         </div>
