@@ -186,6 +186,52 @@
         }
     }
     
+    /**
+     * Show notification message
+     * @param {string} message - The message to display
+     * @param {string} type - The notification type (success, error, info)
+     */
+    function showNotification(message, type = 'info') {
+        const notificationClasses = {
+            'success': window.APP_CONSTANTS?.CSS_CLASSES?.NOTIFICATION_SUCCESS || 'bg-green-600',
+            'error': window.APP_CONSTANTS?.CSS_CLASSES?.NOTIFICATION_ERROR || 'bg-red-600',
+            'info': window.APP_CONSTANTS?.CSS_CLASSES?.NOTIFICATION_INFO || 'bg-blue-600'
+        };
+        
+        const icons = {
+            'success': window.APP_CONSTANTS?.ICONS?.SUCCESS || 'fas fa-check-circle',
+            'error': window.APP_CONSTANTS?.ICONS?.ERROR || 'fas fa-exclamation-circle',
+            'info': window.APP_CONSTANTS?.ICONS?.INFO || 'fas fa-info-circle'
+        };
+        
+        const notification = document.createElement('div');
+        notification.className = `fixed top-4 right-4 px-6 py-3 rounded shadow-lg text-white z-50 ${notificationClasses[type] || notificationClasses.info}`;
+        
+        const iconElement = document.createElement('i');
+        iconElement.className = `${icons[type] || icons.info} mr-2`;
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'flex items-center';
+        messageDiv.appendChild(iconElement);
+        messageDiv.appendChild(document.createTextNode(message));
+        
+        notification.appendChild(messageDiv);
+        document.body.appendChild(notification);
+        
+        // Fade in
+        const fadeInDelay = window.APP_CONFIG?.UI?.ANIMATION?.FAST || 10;
+        setTimeout(() => notification.classList.add('opacity-100'), fadeInDelay);
+        
+        // Remove after configured duration
+        const duration = window.APP_CONFIG?.UI?.NOTIFICATION?.DURATION || 3000;
+        const fadeOutDuration = window.APP_CONFIG?.UI?.NOTIFICATION?.FADE_DURATION || 300;
+        
+        setTimeout(() => {
+            notification.classList.add('opacity-0');
+            setTimeout(() => notification.remove(), fadeOutDuration);
+        }, duration);
+    }
+    
     // Export to global scope
     window.showModal = showModal;
     window.createModal = createModal;

@@ -11,6 +11,7 @@ from core.database import db_manager
 from api.routers import clients_router, deliveries_router, drivers_router, vehicles_router, dashboard_router, routes_router
 from api.routers.scheduling import router as scheduling_router
 from api.security import CSRFMiddleware
+from config.cors_config import cors_config
 
 # 應用程式生命週期管理
 @asynccontextmanager
@@ -31,12 +32,11 @@ app = FastAPI(
 )
 
 # CORS 設定 (允許前端應用程式存取)
+# Using secure CORS configuration based on environment
+cors_settings = cors_config.get_cors_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:8000", "*"],  # React/Vue 開發伺服器 + Swagger UI
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    **cors_settings
 )
 
 # CSRF Protection Middleware
@@ -123,19 +123,18 @@ app.mount("/static", StaticFiles(directory=str(Path(__file__).parent.parent / "w
 
 # Mount JavaScript modules directories from web folder
 web_base_path = Path(__file__).parent.parent / "web"
-app.mount("/modules", StaticFiles(directory=str(web_base_path / "modules")), name="modules")
-app.mount("/config", StaticFiles(directory=str(web_base_path / "config")), name="config")
+if (web_base_path / "js" / "modules").exists():
+    app.mount("/js/modules", StaticFiles(directory=str(web_base_path / "js" / "modules")), name="js_modules")
+if (web_base_path / "config").exists():
+    app.mount("/config", StaticFiles(directory=str(web_base_path / "config")), name="config")
 
-# Mount from js directory for validation and sanitization utils
-js_base_path = Path(__file__).parent.parent.parent / "js"
-if (js_base_path / "utils").exists():
-    app.mount("/utils", StaticFiles(directory=str(js_base_path / "utils")), name="utils")
-if (js_base_path / "core").exists():
-    app.mount("/core", StaticFiles(directory=str(js_base_path / "core")), name="core")
+# Mount utils directory from web folder for validation and sanitization
+if (web_base_path / "utils").exists():
+    app.mount("/utils", StaticFiles(directory=str(web_base_path / "utils")), name="utils")
 
-# Also serve static/utils from modules/utils for backward compatibility
-if (web_base_path / "modules" / "utils").exists():
-    app.mount("/static/utils", StaticFiles(directory=str(web_base_path / "modules" / "utils")), name="static_utils")
+# Mount js/utils for chart utilities
+if (web_base_path / "js" / "utils").exists():
+    app.mount("/js/utils", StaticFiles(directory=str(web_base_path / "js" / "utils")), name="js_utils")
 
 # Custom ReDoc endpoint with id="redoc"
 @app.get("/redoc", include_in_schema=False)

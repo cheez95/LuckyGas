@@ -108,5 +108,16 @@
         renderGenericTable
     };
     
+    // Also export individually for backward compatibility
+    window.renderDeliveriesTable = renderDeliveriesTable;
+    window.renderPendingDeliveriesTable = renderPendingDeliveriesTable;
+    window.renderClientsTable = renderClientsTable;
+    window.renderClientDetailsTable = renderClientDetailsTable;
+    window.renderDriversTable = renderDriversTable;
+    window.renderVehiclesTable = renderVehiclesTable;
+    window.renderRoutesTable = renderRoutesTable;
+    window.renderScheduleTable = renderScheduleTable;
+    window.renderGenericTable = renderGenericTable;
+    
     console.log('✅ Table Renderers module loaded');
 })();
