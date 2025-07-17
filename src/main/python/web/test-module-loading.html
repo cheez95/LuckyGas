@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Module Loading Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <h1>Module Loading Test</h1>
+    <div id="results"></div>
+
+    <!-- Load modules in the same order as the main app -->
+    <script src="/js/modules/module-loader.js"></script>
+    
+    <script>
+        const resultsDiv = document.getElementById('results');
+        
+        function addResult(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.textContent = message;
+            resultsDiv.appendChild(div);
+        }
+        
+        // Wait for modules to load
+        window.addEventListener('modulesLoaded', function(e) {
+            addResult('✅ All modules loaded', 'success');
+            
+            // Test each required dependency
+            const dependencies = [
+                { name: 'window.api', value: window.api },
+                { name: 'window.showNotification', value: window.showNotification },
+                { name: 'window.renderDeliveriesTable', value: window.renderDeliveriesTable }
+            ];
+            
+            dependencies.forEach(dep => {
+                if (dep.value) {
+                    addResult(`✅ ${dep.name} is available`, 'success');
+                } else {
+                    addResult(`❌ ${dep.name} is NOT available`, 'error');
+                }
+            });
+            
+            // Check if delivery handlers loaded successfully
+            if (window.deliveryHandlers) {
+                addResult('✅ Delivery Handlers loaded successfully', 'success');
+            } else {
+                addResult('❌ Delivery Handlers failed to load', 'error');
+            }
+            
+            // Test showNotification
+            if (window.showNotification) {
+                addResult('Testing showNotification...', 'info');
+                window.showNotification('Test notification', 'success');
+            }
+        });
+        
+        // Check console for errors
+        window.addEventListener('error', function(e) {
+            addResult(`❌ Error: ${e.message}`, 'error');
+        });
+    </script>
+</body>
+</html>

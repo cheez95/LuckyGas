@@ -237,6 +237,7 @@
     window.createModal = createModal;
     window.createEditModal = createEditModal;
     window.closeModal = closeModal;
+    window.showNotification = showNotification;
     window.ModalManager = ModalManager;
     
     console.log('✅ UI Components module loaded');
