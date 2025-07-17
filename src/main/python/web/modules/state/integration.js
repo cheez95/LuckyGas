@@ -18,7 +18,6 @@ class StateIntegrator {
      */
     initialize(existingGlobals = {}) {
         if (this.isInitialized) {
-            console.warn('State integrator already initialized');
             return;
         }
 
@@ -52,7 +51,6 @@ class StateIntegrator {
         
         this.isInitialized = true;
         
-        console.log('State integration initialized successfully');
         return migrationResult;
     }
 

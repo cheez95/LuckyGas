@@ -221,11 +221,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (initialHash && initialHash.length > 1) {
         // Navigate to the specified section
         const section = initialHash.substring(1);
-        console.log('Navigating to section from URL hash:', section);
         showSection(section);
     } else {
         // Load dashboard as default
-        console.log('Loading dashboard as default...');
         showSection('dashboard');
     }
     
@@ -868,12 +866,10 @@ function renderClientsTable(clients) {
 async function loadDeliveries(page = 1) {
     // Prevent recursive calls
     if (isLoadingDeliveries) {
-        console.log('Already loading deliveries, skipping...');
         return;
     }
     
     isLoadingDeliveries = true;
-    console.log('Loading deliveries for tab:', currentDeliveryTab, 'Page:', page);
     
     try {
         // No need to restore tab state here - it's handled elsewhere
@@ -911,8 +907,6 @@ async function loadDeliveries(page = 1) {
         }
         
         const url = `${API_BASE}/deliveries?${params}`;
-        console.log('Fetching deliveries from:', url);
-        
         const response = await fetch(url);
         
         if (!response.ok) {

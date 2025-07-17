@@ -291,19 +291,14 @@ export { migration };
 
 // Convenience function to start migration
 export function startMigration(existingGlobals = {}) {
-    console.log('Starting state migration...');
-    
     // Step 1: Migrate existing values
     const migrated = migration.migrateExistingValues(existingGlobals);
-    console.log(`Migrated ${migrated.length} values to state store`);
     
     // Step 2: Create compatibility layer
     const compatibility = migration.createCompatibilityLayer();
-    console.log('Compatibility layer created');
     
     // Step 3: Return wrapped functions
     const wrappers = migration.createFunctionWrappers();
-    console.log('Function wrappers created');
     
     return {
         compatibility,

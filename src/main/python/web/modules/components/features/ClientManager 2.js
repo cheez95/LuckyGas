@@ -9,7 +9,7 @@ import { Modal } from '../Modal.js';
 import { Table } from '../Table.js';
 import { api } from '../../api/endpoints.js';
 import store from '../../../state/store.js';
-import { format } from '../../utils/index.js';
+import { dom, format, security } from '../../utils/index.js';
 
 /**
  * ClientManager - Comprehensive client management component

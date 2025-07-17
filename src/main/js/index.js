@@ -30,11 +30,9 @@ import constants from './config/constants.js';
 
 // Initialize modules on DOM ready
 function initializeApp() {
-    console.log('🚀 Initializing LuckyGas Application...');
-    
     // Initialize CSRF protection
     csrfManager.init().then(() => {
-        console.log('✅ CSRF protection initialized');
+        // CSRF protection initialized
     }).catch(error => {
         console.error('❌ Failed to initialize CSRF protection:', error);
     });
@@ -54,8 +52,6 @@ function initializeApp() {
     // Initialize state management
     store.init();
     stateIntegrator.init();
-    
-    console.log('✅ LuckyGas Application initialized successfully');
     
     // Return initialized modules
     return {
