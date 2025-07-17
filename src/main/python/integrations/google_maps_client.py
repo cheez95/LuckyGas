@@ -7,7 +7,6 @@ import googlemaps
 from datetime import datetime, timedelta
 from typing import List, Dict, Tuple, Optional, Any
 import logging
-import json
 from dataclasses import dataclass
 import asyncio
 from concurrent.futures import ThreadPoolExecutor

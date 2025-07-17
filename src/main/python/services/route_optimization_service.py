@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import json
 import logging
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
+from sqlalchemy import and_
 
 from models.database_schema import Client, Delivery, Driver, Vehicle, Route, VehicleType, DeliveryStatus
 from services.prediction_service import GasPredictionService

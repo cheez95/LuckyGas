@@ -10,11 +10,11 @@ import csrfManager from './core/csrf-manager.js';
 import { secureFetch } from './core/secure-fetch.js';
 
 // Import API modules
-import ApiClient from './core/api/client.js';
-import * as endpoints from './core/api/endpoints.js';
-import cache from './core/api/cache.js';
+import { ApiClient } from './core/api/client.js';
+import { LuckyGasAPI } from './core/api/endpoints.js';
+import { cache } from './core/api/cache.js';
 import * as interceptors from './core/api/interceptors.js';
-import * as loading from './core/api/loading.js';
+import { loadingManager } from './core/api/loading.js';
 
 // Import utility modules
 import ValidationUtils from './utils/validation.js';
@@ -22,8 +22,8 @@ import SanitizationUtils from './utils/sanitization.js';
 import SecurityUtils from './utils/security-utils.js';
 
 // Import state management
-import store from './state/store.js';
-import stateIntegrator from './state/integrator.js';
+import { store } from './state/store.js';
+import { integrator } from './state/integrator.js';
 
 // Import configuration
 import constants from './config/constants.js';
@@ -31,34 +31,40 @@ import constants from './config/constants.js';
 // Initialize modules on DOM ready
 function initializeApp() {
     // Initialize CSRF protection
-    csrfManager.init().then(() => {
-        // CSRF protection initialized
-    }).catch(error => {
-        console.error('❌ Failed to initialize CSRF protection:', error);
-    });
+    csrfManager.initialize();
     
     // Initialize API client
     const apiClient = new ApiClient({
         baseURL: constants.API_CONFIG.BASE_URL,
-        timeout: constants.API_CONFIG.TIMEOUT
+        timeout: constants.API_CONFIG.TIMEOUT,
+        interceptors: {
+            request: [
+                interceptors.authInterceptor,
+                interceptors.csrfInterceptor,
+                interceptors.contentTypeInterceptor
+            ],
+            response: [
+                interceptors.errorInterceptor,
+                interceptors.timingInterceptor
+            ]
+        }
     });
     
-    // Apply interceptors
-    interceptors.setupInterceptors(apiClient);
+    // Create API instance
+    const api = new LuckyGasAPI(apiClient);
     
-    // Initialize loading manager
-    loading.init();
-    
-    // Initialize state management
-    store.init();
-    stateIntegrator.init();
+    // Initialize state bindings
+    integrator.setupCommonBindings();
     
     // Return initialized modules
     return {
-        api: apiClient,
+        api,
+        apiClient,
         csrf: csrfManager,
         store,
-        stateIntegrator
+        integrator,
+        cache,
+        loadingManager
     };
 }
 
@@ -71,10 +77,10 @@ const LuckyGas = {
     // API modules
     api: {
         client: ApiClient,
-        endpoints,
+        LuckyGasAPI,
         cache,
         interceptors,
-        loading
+        loadingManager
     },
     
     // Utility modules
@@ -87,7 +93,7 @@ const LuckyGas = {
     // State management
     state: {
         store,
-        integrator: stateIntegrator
+        integrator
     },
     
     // Configuration
