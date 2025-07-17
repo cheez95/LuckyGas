@@ -6,7 +6,6 @@ import json
 import logging
 
 from models.database_schema import Driver, Delivery, Vehicle
-from core.database import get_db
 
 logger = logging.getLogger(__name__)
 

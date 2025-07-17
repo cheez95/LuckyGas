@@ -7,7 +7,6 @@ import os
 from typing import Optional, Dict, Any
 from pathlib import Path
 from dotenv import load_dotenv
-import json
 from cryptography.fernet import Fernet
 import logging
 

@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.openapi.docs import get_redoc_html
 from contextlib import asynccontextmanager
 import sys
 from pathlib import Path
@@ -154,7 +153,8 @@ async def custom_redoc_html():
             padding: 0;
         }
         #redoc {
-            display: none;
+            display: block;
+            min-height: 100vh;
         }
         </style>
     </head>
