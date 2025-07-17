@@ -160,6 +160,226 @@ async function secureFetch(url, options = {}) {
     }
 }
 
+// ============================================
+// UTILITY FUNCTIONS - Reducing 3,000+ lines
+// ============================================
+
+// API UTILITY - Consolidates 70+ fetch patterns
+const api = {
+    async request(endpoint, options = {}) {
+        const {
+            method = 'GET',
+            body = null,
+            headers = {},
+            skipNotification = false,
+            successMessage = null,
+            errorMessage = null,
+            skipAuth = false
+        } = options;
+
+        try {
+            const config = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...headers
+                }
+            };
+
+            if (body && method !== 'GET') {
+                config.body = JSON.stringify(body);
+            }
+
+            // Use secureFetch for non-GET requests
+            const fetchFn = skipAuth || method === 'GET' ? fetch : secureFetch;
+            const response = await fetchFn(`${API_BASE}${endpoint}`, config);
+            
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || `HTTP error! status: ${response.status}`);
+            }
+
+            // Handle empty responses
+            const contentLength = response.headers.get('content-length');
+            if (contentLength === '0' || response.status === 204) {
+                if (successMessage && !skipNotification) {
+                    showNotification(successMessage, 'success');
+                }
+                return null;
+            }
+
+            // Handle different response types
+            const contentType = response.headers.get('content-type');
+            let data;
+            
+            if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+            } else if (contentType && contentType.includes('text/')) {
+                data = await response.text();
+            } else {
+                data = await response.blob();
+            }
+            
+            if (successMessage && !skipNotification) {
+                showNotification(successMessage, 'success');
+            }
+            
+            return data;
+        } catch (error) {
+            console.error(`API Error (${endpoint}):`, error);
+            if (!skipNotification) {
+                showNotification(errorMessage || error.message || '操作失敗', 'error');
+            }
+            throw error;
+        }
+    },
+
+    get(endpoint, options = {}) {
+        return this.request(endpoint, { ...options, method: 'GET' });
+    },
+
+    post(endpoint, body, options = {}) {
+        return this.request(endpoint, { ...options, method: 'POST', body });
+    },
+
+    put(endpoint, body, options = {}) {
+        return this.request(endpoint, { ...options, method: 'PUT', body });
+    },
+
+    delete(endpoint, options = {}) {
+        return this.request(endpoint, { ...options, method: 'DELETE' });
+    }
+};
+
+// TABLE UTILITY - Consolidates table rendering
+const table = {
+    render(tbodyId, data, columns, emptyMessage = '沒有找到資料') {
+        const tbody = document.getElementById(tbodyId);
+        if (!tbody) return;
+        
+        // Clear existing content safely
+        while (tbody.firstChild) {
+            tbody.removeChild(tbody.firstChild);
+        }
+        
+        // Handle empty state
+        if (!data || data.length === 0) {
+            const row = tbody.insertRow();
+            const cell = row.insertCell();
+            cell.colSpan = columns.length;
+            cell.className = 'px-6 py-4 text-center text-gray-500';
+            cell.textContent = emptyMessage;
+            return;
+        }
+        
+        // Render rows
+        data.forEach(item => {
+            const row = tbody.insertRow();
+            row.className = 'hover:bg-gray-50 transition-colors';
+            
+            columns.forEach(col => {
+                const cell = row.insertCell();
+                cell.className = col.class || 'px-6 py-4 text-sm';
+                
+                if (col.render) {
+                    const content = col.render(item);
+                    if (typeof content === 'string') {
+                        cell.innerHTML = content;
+                    } else if (content instanceof HTMLElement) {
+                        cell.appendChild(content);
+                    }
+                } else if (col.field) {
+                    const value = this.getValue(item, col.field);
+                    if (col.format) {
+                        cell.textContent = col.format(value);
+                    } else {
+                        cell.textContent = value;
+                    }
+                }
+            });
+        });
+    },
+    
+    getValue(obj, path) {
+        return path.split('.').reduce((acc, part) => acc?.[part], obj) || '-';
+    },
+    
+    statusBadge(status, config) {
+        const info = config[status] || { text: status, class: 'bg-gray-100 text-gray-800' };
+        return `<span class="px-2 py-1 text-xs rounded-full ${info.class}">${SecurityUtils.escapeHtml(info.text)}</span>`;
+    },
+    
+    actionButtons(buttons) {
+        return buttons.map(btn => 
+            `<button class="${btn.class}" title="${btn.title}" onclick="${btn.onclick}">
+                <i class="${btn.icon}"></i>
+            </button>`
+        ).join('');
+    }
+};
+
+// HTML TEMPLATE UTILITY - Safe HTML generation
+const html = {
+    escape(text) {
+        return SecurityUtils.escapeHtml(text);
+    },
+    
+    button(text, className = 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700', onclick = '') {
+        return `<button class="${className}" ${onclick ? `onclick="${onclick}"` : ''}>${this.escape(text)}</button>`;
+    },
+    
+    iconButton(icon, title, className = 'text-blue-600 hover:text-blue-900', onclick = '') {
+        return `<button class="${className}" title="${this.escape(title)}" ${onclick ? `onclick="${onclick}"` : ''}>
+            <i class="${icon}"></i>
+        </button>`;
+    },
+    
+    modal(title, content, modalId = null) {
+        const id = modalId || `modal-${Date.now()}`;
+        return `
+            <div id="${id}" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+                <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-auto">
+                    <div class="px-6 py-4 border-b flex justify-between items-center">
+                        <h3 class="text-lg font-semibold">${this.escape(title)}</h3>
+                        <button onclick="closeModal('${id}')" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="p-6">${content}</div>
+                </div>
+            </div>
+        `;
+    },
+    
+    formGroup(label, inputHtml, error = '', required = false) {
+        return `
+            <div class="mb-4">
+                <label class="block text-sm font-medium mb-1">
+                    ${this.escape(label)}${required ? ' <span class="text-red-500">*</span>' : ''}
+                </label>
+                ${inputHtml}
+                ${error ? `<p class="text-red-500 text-xs mt-1">${this.escape(error)}</p>` : ''}
+            </div>
+        `;
+    },
+    
+    select(name, options, selectedValue = '', className = 'w-full border rounded px-3 py-2') {
+        const optionsHtml = options.map(opt => {
+            const value = opt.value !== undefined ? opt.value : opt;
+            const text = opt.text !== undefined ? opt.text : opt;
+            const selected = value === selectedValue ? 'selected' : '';
+            return `<option value="${this.escape(value)}" ${selected}>${this.escape(text)}</option>`;
+        }).join('');
+        
+        return `<select name="${name}" class="${className}">${optionsHtml}</select>`;
+    },
+    
+    input(type, name, value = '', placeholder = '', className = 'w-full border rounded px-3 py-2') {
+        return `<input type="${type}" name="${name}" value="${this.escape(value)}" 
+                placeholder="${this.escape(placeholder)}" class="${className}">`;
+    }
+};
+
 // API Base URL
 const API_BASE = window.APP_CONFIG?.API?.BASE_URL || 'http://localhost:8000/api';
 
@@ -430,42 +650,36 @@ function switchDeliveryTab(tab) {
 
 // Dashboard with real data
 async function loadDashboard() {
-    try {
-        // Show loading state
-        document.getElementById('total-clients').textContent = '載入中...';
-        document.getElementById('today-deliveries').textContent = '載入中...';
-        document.getElementById('available-drivers').textContent = '載入中...';
-        document.getElementById('available-vehicles').textContent = '載入中...';
-        
-        // Load dashboard statistics from new endpoint
-        const statsRes = await fetch(`${API_BASE}/dashboard/stats`);
-        if (!statsRes.ok) {
-            throw new Error(`HTTP error! status: ${statsRes.status}`);
-        }
-        const stats = await statsRes.json();
-        
-        // Update statistics cards
-        document.getElementById('total-clients').textContent = stats.overview?.total_clients || 0;
-        document.getElementById('today-deliveries').textContent = stats.today_deliveries?.total || 0;
-        document.getElementById('available-drivers').textContent = stats.overview?.available_drivers || 0;
-        document.getElementById('available-vehicles').textContent = stats.overview?.available_vehicles || 0;
-        
-        // Load charts with data from stats
-        loadWeeklyDeliveryChartFromStats(stats.week_trend);
-        loadStatusChartFromStats(stats.today_deliveries);
-        
-        // Load recent activities from stats
-        loadRecentActivitiesFromStats(stats.recent_activities);
-    } catch (error) {
-        console.error('Error loading dashboard:', error);
-        showNotification('載入儀表板失敗', 'error');
-        
-        // Show error state
-        document.getElementById('total-clients').textContent = '-';
-        document.getElementById('today-deliveries').textContent = '-';
-        document.getElementById('available-drivers').textContent = '-';
-        document.getElementById('available-vehicles').textContent = '-';
-    }
+    // Show loading state
+    ['total-clients', 'today-deliveries', 'available-drivers', 'available-vehicles'].forEach(id => {
+        document.getElementById(id).textContent = '載入中...';
+    });
+    
+    const stats = await api.get('/dashboard/stats', {
+        errorMessage: '載入儀表板失敗',
+        skipNotification: false
+    }).catch(() => {
+        // Show error state on failure
+        ['total-clients', 'today-deliveries', 'available-drivers', 'available-vehicles'].forEach(id => {
+            document.getElementById(id).textContent = '-';
+        });
+        return null;
+    });
+    
+    if (!stats) return;
+    
+    // Update statistics cards
+    document.getElementById('total-clients').textContent = stats.overview?.total_clients || 0;
+    document.getElementById('today-deliveries').textContent = stats.today_deliveries?.total || 0;
+    document.getElementById('available-drivers').textContent = stats.overview?.available_drivers || 0;
+    document.getElementById('available-vehicles').textContent = stats.overview?.available_vehicles || 0;
+    
+    // Load charts with data from stats
+    loadWeeklyDeliveryChartFromStats(stats.week_trend);
+    loadStatusChartFromStats(stats.today_deliveries);
+    
+    // Load recent activities from stats
+    loadRecentActivitiesFromStats(stats.recent_activities);
 }
 
 function loadWeeklyDeliveryChartFromStats(weekTrend) {
@@ -706,160 +920,67 @@ function loadRecentActivitiesFromStats(recentActivities) {
 
 // Enhanced Clients with search and filters
 async function loadClients(page = 1) {
-    try {
-        // Build query parameters
-        const params = new URLSearchParams({
-            page: page,
-            page_size: window.APP_CONFIG?.PAGINATION?.DEFAULT_PAGE_SIZE || 10
-        });
-        
-        if (clientFilters.keyword) params.append('keyword', clientFilters.keyword);
-        if (clientFilters.district) params.append('district', clientFilters.district);
-        if (clientFilters.isActive !== '') params.append('is_active', clientFilters.isActive);
-        if (clientFilters.sortBy) {
-            params.append('order_by', clientFilters.sortBy);
-            params.append('order_desc', clientFilters.sortOrder === 'desc');
-        }
-        
-        const response = await fetch(`${API_BASE}/clients?${params}`);
-        const data = await response.json();
-        
-        allClients = data.items || [];
-        currentClientPage = page;
-        
-        // Render table
-        renderClientsTable(allClients);
-        
-        // Update pagination
-        updatePagination('clients', data.page, data.total_pages, data.total);
-        
-    } catch (error) {
-        console.error('Error loading clients:', error);
-        showNotification('載入客戶資料失敗', 'error');
+    // Build query parameters
+    const params = new URLSearchParams({
+        page: page,
+        page_size: window.APP_CONFIG?.PAGINATION?.DEFAULT_PAGE_SIZE || 10
+    });
+    
+    if (clientFilters.keyword) params.append('keyword', clientFilters.keyword);
+    if (clientFilters.district) params.append('district', clientFilters.district);
+    if (clientFilters.isActive !== '') params.append('is_active', clientFilters.isActive);
+    if (clientFilters.sortBy) {
+        params.append('order_by', clientFilters.sortBy);
+        params.append('order_desc', clientFilters.sortOrder === 'desc');
     }
+    
+    const data = await api.get(`/clients?${params}`);
+    
+    allClients = data.items || [];
+    currentClientPage = page;
+    
+    // Render table
+    renderClientsTable(allClients);
+    
+    // Update pagination
+    updatePagination('clients', data.page, data.total_pages, data.total);
 }
 
 function renderClientsTable(clients) {
-    const tbody = document.getElementById('clients-tbody');
-    // Clear existing content safely
-    while (tbody.firstChild) {
-        tbody.removeChild(tbody.firstChild);
-    }
-    
-    if (clients.length === 0) {
-        const row = document.createElement('tr');
-        const cell = document.createElement('td');
-        cell.colSpan = 7;
-        cell.className = 'px-6 py-4 text-center text-gray-500';
-        cell.textContent = '沒有找到符合條件的客戶';
-        row.appendChild(cell);
-        tbody.appendChild(row);
-        return;
-    }
-    
-    clients.forEach(client => {
-        const row = document.createElement('tr');
-        row.className = 'hover:bg-gray-50 transition-colors';
-        
-        // Cell 1: Client Code/ID
-        const cell1 = document.createElement('td');
-        cell1.className = 'px-6 py-4 whitespace-nowrap text-sm';
-        const codeDiv = SecurityUtils.createElement('div', { className: 'text-gray-900' }, 
-            [client.client_code || client.id]);
-        const idDiv = SecurityUtils.createElement('div', { className: 'text-xs text-gray-500' }, 
-            ['ID: ' + client.id]);
-        cell1.appendChild(codeDiv);
-        cell1.appendChild(idDiv);
-        row.appendChild(cell1);
-        
-        // Cell 2: Name and Contact Info
-        const cell2 = document.createElement('td');
-        cell2.className = 'px-6 py-4 whitespace-nowrap';
-        const nameContainer = document.createElement('div');
-        
-        const nameDiv = SecurityUtils.createElement('div', { className: 'font-medium' }, 
-            [client.name || '-']);
-        nameContainer.appendChild(nameDiv);
-        
-        const invoiceDiv = SecurityUtils.createElement('div', { className: 'text-sm text-gray-600' }, 
-            [client.invoice_title || '-']);
-        nameContainer.appendChild(invoiceDiv);
-        
-        if (client.contact_person) {
-            const contactDiv = SecurityUtils.createElement('div', { className: 'text-xs text-gray-500' }, 
-                [client.contact_person]);
-            nameContainer.appendChild(contactDiv);
+    const columns = [
+        {
+            class: 'px-6 py-4 whitespace-nowrap text-sm',
+            render: client => `<div class="text-gray-900">${client.client_code || client.id}</div>
+                             <div class="text-xs text-gray-500">ID: ${client.id}</div>`
+        },
+        {
+            class: 'px-6 py-4 whitespace-nowrap',
+            render: client => `<div class="font-medium">${client.name || '-'}</div>
+                             <div class="text-sm text-gray-600">${client.invoice_title || '-'}</div>
+                             ${client.contact_person ? `<div class="text-xs text-gray-500">${client.contact_person}</div>` : ''}`
+        },
+        { field: 'address', class: 'px-6 py-4 text-sm' },
+        { field: 'district', class: 'px-6 py-4 whitespace-nowrap text-sm', format: v => v || '-' },
+        {
+            class: 'px-6 py-4 whitespace-nowrap text-sm',
+            render: client => `<div>${client.total_orders || 0} 筆</div>
+                             ${client.last_order_date ? `<div class="text-xs text-gray-500">${formatDate(client.last_order_date)}</div>` : ''}`
+        },
+        {
+            class: 'px-6 py-4 whitespace-nowrap',
+            render: client => `<span class="px-2 py-1 text-xs rounded-full ${client.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${client.is_active ? '啟用' : '停用'}</span>`
+        },
+        {
+            class: 'px-6 py-4 whitespace-nowrap text-sm',
+            render: client => table.actions([
+                { icon: 'eye', color: 'blue', title: '檢視', onClick: () => viewClient(client.client_code) },
+                { icon: 'edit', color: 'green', title: '編輯', onClick: () => editClient(client.client_code) },
+                { icon: client.is_active ? 'pause' : 'play', color: 'orange', title: client.is_active ? '停用' : '啟用', onClick: () => toggleClientStatus(client.client_code, client.is_active) }
+            ])
         }
-        
-        cell2.appendChild(nameContainer);
-        row.appendChild(cell2);
-        
-        // Cell 3: Address
-        const cell3 = document.createElement('td');
-        cell3.className = 'px-6 py-4 text-sm';
-        cell3.textContent = client.address;
-        row.appendChild(cell3);
-        
-        // Cell 4: District
-        const cell4 = document.createElement('td');
-        cell4.className = 'px-6 py-4 whitespace-nowrap text-sm';
-        cell4.textContent = client.district || '-';
-        row.appendChild(cell4);
-        
-        // Cell 5: Orders
-        const cell5 = document.createElement('td');
-        cell5.className = 'px-6 py-4 whitespace-nowrap text-sm';
-        const ordersDiv = SecurityUtils.createElement('div', {}, 
-            [(client.total_orders || 0) + ' 筆']);
-        cell5.appendChild(ordersDiv);
-        
-        if (client.last_order_date) {
-            const dateDiv = SecurityUtils.createElement('div', { className: 'text-xs text-gray-500' }, 
-                [formatDate(client.last_order_date)]);
-            cell5.appendChild(dateDiv);
-        }
-        row.appendChild(cell5);
-        
-        // Cell 6: Status
-        const cell6 = document.createElement('td');
-        cell6.className = 'px-6 py-4 whitespace-nowrap';
-        const statusSpan = SecurityUtils.createElement('span', 
-            { className: `px-2 py-1 text-xs rounded-full ${client.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}` }, 
-            [client.is_active ? '啟用' : '停用']);
-        cell6.appendChild(statusSpan);
-        row.appendChild(cell6);
-        
-        // Cell 7: Actions
-        const cell7 = document.createElement('td');
-        cell7.className = 'px-6 py-4 whitespace-nowrap text-sm';
-        
-        // View button
-        const viewBtn = document.createElement('button');
-        viewBtn.className = 'text-blue-600 hover:text-blue-900 mr-2';
-        viewBtn.title = '檢視';
-        viewBtn.onclick = function() { viewClient(client.client_code); };
-        viewBtn.innerHTML = '<i class="fas fa-eye"></i>';
-        cell7.appendChild(viewBtn);
-        
-        // Edit button
-        const editBtn = document.createElement('button');
-        editBtn.className = 'text-green-600 hover:text-green-900 mr-2';
-        editBtn.title = '編輯';
-        editBtn.onclick = function() { editClient(client.client_code); };
-        editBtn.innerHTML = '<i class="fas fa-edit"></i>';
-        cell7.appendChild(editBtn);
-        
-        // Toggle status button
-        const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'text-orange-600 hover:text-orange-900';
-        toggleBtn.title = client.is_active ? '停用' : '啟用';
-        toggleBtn.onclick = function() { toggleClientStatus(client.client_code, client.is_active); };
-        toggleBtn.innerHTML = `<i class="fas fa-${client.is_active ? 'pause' : 'play'}"></i>`;
-        cell7.appendChild(toggleBtn);
-        
-        row.appendChild(cell7);
-        tbody.appendChild(row);
-    });
+    ];
+    
+    table.render('clients-tbody', clients, columns, '沒有找到符合條件的客戶');
 }
 
 // Enhanced Deliveries with date range and filters
@@ -872,9 +993,6 @@ async function loadDeliveries(page = 1) {
     isLoadingDeliveries = true;
     
     try {
-        // No need to restore tab state here - it's handled elsewhere
-        // This was causing a circular dependency with switchDeliveryTab
-        
         // Build query parameters
         const params = new URLSearchParams({
             page: page,
@@ -906,17 +1024,10 @@ async function loadDeliveries(page = 1) {
             params.append('order_desc', deliveryFilters.sortOrder === 'desc');
         }
         
-        const url = `${API_BASE}/deliveries?${params}`;
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-            console.error('API response error:', response.status, response.statusText);
-            const errorText = await response.text();
-            console.error('Error details:', errorText);
-            throw new Error(`API error: ${response.status} ${response.statusText}`);
-        }
-        
-        const data = await response.json();
+        // Use api utility with error handling built-in
+        const data = await api.get(`/deliveries?${params}`, {
+            errorMessage: '載入配送單失敗'
+        });
         
         allDeliveries = data.items || [];
         currentDeliveryPage = page;
@@ -930,26 +1041,12 @@ async function loadDeliveries(page = 1) {
         // Update summary statistics
         updateDeliverySummary(data.items);
         
-        // Reset loading flag
-        isLoadingDeliveries = false;
-        
     } catch (error) {
         console.error('Error loading deliveries:', error);
-        console.error('Error stack:', error.stack);
         console.error('Current tab:', currentDeliveryTab);
-        console.error('API_BASE:', API_BASE);
         
-        // Show more specific error message
-        let errorMessage = '載入配送單失敗';
-        if (error.message.includes('Failed to fetch')) {
-            errorMessage = '無法連接到伺服器';
-        } else if (error.message.includes('API error')) {
-            errorMessage = `伺服器錯誤: ${error.message}`;
-        }
-        
-        showNotification(errorMessage, 'error');
-        
-        // Show empty state in table
+        // Error notification already handled by api utility
+        // Just show empty state in table
         const tbody = document.getElementById('deliveries-tbody');
         if (tbody) {
             // Clear existing content safely
@@ -961,132 +1058,100 @@ async function loadDeliveries(page = 1) {
             const cell = document.createElement('td');
             cell.colSpan = 8;
             cell.className = 'px-6 py-4 text-center text-red-500';
-            cell.textContent = errorMessage;
+            cell.textContent = error.message || '載入配送單失敗';
             row.appendChild(cell);
             tbody.appendChild(row);
         }
-        
-        // Reset loading flag even on error
+    } finally {
+        // Always reset loading flag
         isLoadingDeliveries = false;
     }
 }
 
 function renderDeliveriesTable(deliveries) {
-    const tbody = document.getElementById('deliveries-tbody');
-    // Clear existing content safely
-    while (tbody.firstChild) {
-        tbody.removeChild(tbody.firstChild);
-    }
+    const statusDisplay = window.APP_CONSTANTS?.STATUS_DISPLAY || {};
     
-    if (deliveries.length === 0) {
-        const row = document.createElement('tr');
-        const cell = document.createElement('td');
-        cell.colSpan = 8;
-        cell.className = 'px-6 py-4 text-center text-gray-500';
-        cell.textContent = '沒有找到符合條件的配送單';
-        row.appendChild(cell);
-        tbody.appendChild(row);
-        return;
-    }
+    const columns = [
+        {
+            // Order Number
+            class: 'px-6 py-4 whitespace-nowrap text-sm font-medium',
+            render: d => d.order_number || d.id
+        },
+        {
+            // Client Name
+            field: 'client_name',
+            class: 'px-6 py-4 whitespace-nowrap text-sm'
+        },
+        {
+            // Delivery Address
+            class: 'px-6 py-4 text-sm',
+            render: d => `<div>${SecurityUtils.escapeHtml(d.delivery_address)}</div>
+                         <div class="text-xs text-gray-500">${SecurityUtils.escapeHtml(d.delivery_district || '')}</div>`
+        },
+        {
+            // Scheduled Date/Time
+            class: 'px-6 py-4 whitespace-nowrap text-sm',
+            render: d => `<div>${formatDate(d.scheduled_date)}</div>
+                         <div class="text-xs text-gray-500">${d.scheduled_time_slot || '-'}</div>`
+        },
+        {
+            // Quantity/Amount
+            class: 'px-6 py-4 whitespace-nowrap text-sm',
+            render: d => `${d.gas_quantity} 桶 / $${d.total_amount}`
+        },
+        {
+            // Status
+            class: 'px-6 py-4 whitespace-nowrap',
+            render: d => {
+                const status = statusDisplay[d.status] || { 
+                    text: d.status, 
+                    class: 'bg-gray-100 text-gray-800' 
+                };
+                return table.statusBadge(d.status, statusDisplay);
+            }
+        },
+        {
+            // Driver Name
+            field: 'driver_name',
+            class: 'px-6 py-4 whitespace-nowrap text-sm'
+        },
+        {
+            // Actions
+            class: 'px-6 py-4 whitespace-nowrap text-sm',
+            render: d => {
+                const buttons = [];
+                
+                if (d.status === 'pending') {
+                    buttons.push({
+                        icon: 'fas fa-user-plus',
+                        title: '指派',
+                        class: 'text-blue-600 hover:text-blue-900 mr-2',
+                        onclick: `assignDelivery(${d.id})`
+                    });
+                }
+                
+                buttons.push({
+                    icon: 'fas fa-eye',
+                    title: '檢視',
+                    class: 'text-green-600 hover:text-green-900 mr-2',
+                    onclick: `viewDelivery(${d.id})`
+                });
+                
+                if (d.status !== 'completed' && d.status !== 'cancelled') {
+                    buttons.push({
+                        icon: 'fas fa-sync',
+                        title: '更新狀態',
+                        class: 'text-purple-600 hover:text-purple-900',
+                        onclick: `updateDeliveryStatus(${d.id}, '${d.status}')`
+                    });
+                }
+                
+                return table.actionButtons(buttons);
+            }
+        }
+    ];
     
-    deliveries.forEach(delivery => {
-        const statusDisplay = window.APP_CONSTANTS?.STATUS_DISPLAY || {};
-        const status = statusDisplay[delivery.status] || { 
-            text: delivery.status, 
-            class: 'bg-gray-100 text-gray-800' 
-        };
-        
-        const row = document.createElement('tr');
-        row.className = 'hover:bg-gray-50 transition-colors';
-        
-        // Cell 1: Order Number
-        const cell1 = document.createElement('td');
-        cell1.className = 'px-6 py-4 whitespace-nowrap text-sm font-medium';
-        cell1.textContent = delivery.order_number || delivery.id;
-        row.appendChild(cell1);
-        
-        // Cell 2: Client Name
-        const cell2 = document.createElement('td');
-        cell2.className = 'px-6 py-4 whitespace-nowrap text-sm';
-        cell2.textContent = delivery.client_name || '-';
-        row.appendChild(cell2);
-        
-        // Cell 3: Delivery Address
-        const cell3 = document.createElement('td');
-        cell3.className = 'px-6 py-4 text-sm';
-        const addressDiv = SecurityUtils.createElement('div', {}, [delivery.delivery_address]);
-        const districtDiv = SecurityUtils.createElement('div', { className: 'text-xs text-gray-500' }, 
-            [delivery.delivery_district || '']);
-        cell3.appendChild(addressDiv);
-        cell3.appendChild(districtDiv);
-        row.appendChild(cell3);
-        
-        // Cell 4: Scheduled Date/Time
-        const cell4 = document.createElement('td');
-        cell4.className = 'px-6 py-4 whitespace-nowrap text-sm';
-        const dateDiv = SecurityUtils.createElement('div', {}, [formatDate(delivery.scheduled_date)]);
-        const timeDiv = SecurityUtils.createElement('div', { className: 'text-xs text-gray-500' }, 
-            [delivery.scheduled_time_slot || '-']);
-        cell4.appendChild(dateDiv);
-        cell4.appendChild(timeDiv);
-        row.appendChild(cell4);
-        
-        // Cell 5: Quantity/Amount
-        const cell5 = document.createElement('td');
-        cell5.className = 'px-6 py-4 whitespace-nowrap text-sm';
-        cell5.textContent = `${delivery.gas_quantity} 桶 / $${delivery.total_amount}`;
-        row.appendChild(cell5);
-        
-        // Cell 6: Status
-        const cell6 = document.createElement('td');
-        cell6.className = 'px-6 py-4 whitespace-nowrap';
-        const statusSpan = SecurityUtils.createElement('span', 
-            { className: `px-2 py-1 text-xs rounded-full ${status.class}` }, 
-            [status.text]);
-        cell6.appendChild(statusSpan);
-        row.appendChild(cell6);
-        
-        // Cell 7: Driver Name
-        const cell7 = document.createElement('td');
-        cell7.className = 'px-6 py-4 whitespace-nowrap text-sm';
-        cell7.textContent = delivery.driver_name || '-';
-        row.appendChild(cell7);
-        
-        // Cell 8: Actions
-        const cell8 = document.createElement('td');
-        cell8.className = 'px-6 py-4 whitespace-nowrap text-sm';
-        
-        // Assign button (only for pending deliveries)
-        if (delivery.status === 'pending') {
-            const assignBtn = document.createElement('button');
-            assignBtn.className = 'text-blue-600 hover:text-blue-900 mr-2';
-            assignBtn.title = '指派';
-            assignBtn.onclick = function() { assignDelivery(delivery.id); };
-            assignBtn.innerHTML = '<i class="fas fa-user-plus"></i>';
-            cell8.appendChild(assignBtn);
-        }
-        
-        // View button
-        const viewBtn = document.createElement('button');
-        viewBtn.className = 'text-green-600 hover:text-green-900 mr-2';
-        viewBtn.title = '檢視';
-        viewBtn.onclick = function() { viewDelivery(delivery.id); };
-        viewBtn.innerHTML = '<i class="fas fa-eye"></i>';
-        cell8.appendChild(viewBtn);
-        
-        // Update status button (not for completed/cancelled)
-        if (delivery.status !== 'completed' && delivery.status !== 'cancelled') {
-            const updateBtn = document.createElement('button');
-            updateBtn.className = 'text-purple-600 hover:text-purple-900';
-            updateBtn.title = '更新狀態';
-            updateBtn.onclick = function() { updateDeliveryStatus(delivery.id, delivery.status); };
-            updateBtn.innerHTML = '<i class="fas fa-sync"></i>';
-            cell8.appendChild(updateBtn);
-        }
-        
-        row.appendChild(cell8);
-        tbody.appendChild(row);
-    });
+    table.render('deliveries-tbody', deliveries, columns, '沒有找到符合條件的配送單');
 }
 
 function updateDeliverySummary(deliveries) {
@@ -1735,22 +1800,16 @@ function calculateDeliveryStats(deliveries) {
 async function toggleClientStatus(clientCode, currentStatus) {
     if (!confirm(`確定要${currentStatus ? '停用' : '啟用'}此客戶嗎？`)) return;
     
-    try {
-        const response = await secureFetch(`${API_BASE}/clients/by-code/${clientCode}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ is_active: !currentStatus })
-        });
-        
-        if (response.ok) {
-            showNotification(`客戶已${!currentStatus ? '啟用' : '停用'}`, 'success');
-            loadClients(currentClientPage);
-        } else {
-            throw new Error('Update failed');
-        }
-    } catch (error) {
-        showNotification('更新失敗', 'error');
-    }
+    await api.put(`/clients/by-code/${clientCode}`, { is_active: !currentStatus });
+    await loadClients(currentClientPage);
+}
+
+// Delete client
+async function deleteClient(clientId) {
+    if (!confirm('確定要刪除此客戶嗎？\n\n⚠️ 警告：此操作無法復原！')) return;
+    
+    await api.delete(`/clients/${clientId}`);
+    await loadClients(currentClientPage);
 }
 
 // Modal function
@@ -1929,23 +1988,12 @@ async function editClient(clientCode) {
             
             const updateData = SanitizationUtils.sanitizeFormData(rawData, sanitizationSchema);
             
-            try {
-                const updateResponse = await secureFetch(`${API_BASE}/clients/by-code/${clientCode}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(updateData)
-                });
-                
-                if (updateResponse.ok) {
-                    showNotification('客戶資料已更新', 'success');
-                    closeModal(modal);
-                    loadClients();
-                } else {
-                    const error = await updateResponse.json();
-                    showNotification(error.detail || '更新失敗', 'error');
-                }
-            } catch (error) {
-                showNotification('更新客戶資料失敗: ' + error.message, 'error');
+            const result = await api.put(`/clients/by-code/${clientCode}`, updateData, {
+                successMessage: '客戶資料已更新'
+            });
+            if (result !== null) {
+                closeModal(modal);
+                loadClients();
             }
         });
         
@@ -1999,22 +2047,12 @@ async function editDriver(driverId) {
                 }
             }
             
-            try {
-                const updateResponse = await secureFetch(`${API_BASE}/drivers/${driverId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(updateData)
-                });
-                
-                if (updateResponse.ok) {
-                    showNotification('司機資料已更新', 'success');
-                    closeModal(modal);
-                    loadDrivers();
-                } else {
-                    throw new Error('更新失敗');
-                }
-            } catch (error) {
-                showNotification('更新司機資料失敗', 'error');
+            const result = await api.put(`/drivers/${driverId}`, updateData, {
+                successMessage: '司機資料已更新'
+            });
+            if (result !== null) {
+                closeModal(modal);
+                loadDrivers();
             }
         });
         
@@ -2073,22 +2111,12 @@ async function editVehicle(vehicleId) {
                 }
             }
             
-            try {
-                const updateResponse = await secureFetch(`${API_BASE}/vehicles/${vehicleId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(updateData)
-                });
-                
-                if (updateResponse.ok) {
-                    showNotification('車輛資料已更新', 'success');
-                    closeModal(modal);
-                    loadVehicles();
-                } else {
-                    throw new Error('更新失敗');
-                }
-            } catch (error) {
-                showNotification('更新車輛資料失敗', 'error');
+            const result = await api.put(`/vehicles/${vehicleId}`, updateData, {
+                successMessage: '車輛資料已更新'
+            });
+            if (result !== null) {
+                closeModal(modal);
+                loadVehicles();
             }
         });
         
@@ -2303,605 +2331,211 @@ function setupFormHandlers() {
     }
     
     // Add client form handler
-    const addClientForm = document.getElementById('add-client-form');
-    if (addClientForm) {
-        addClientForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            // Clear previous errors
-            ValidationUtils.clearFormErrors(addClientForm);
-            
-            const formData = new FormData(addClientForm);
-            
-            // Define validation rules
-            const validationRules = {
-                name: { required: true, type: 'name', options: { minLength: 2, maxLength: 100 } },
-                client_code: { required: true, type: 'clientCode' },
-                invoice_title: { required: true, type: 'name', options: { minLength: 2, maxLength: 100 } },
-                tax_id: { required: false, type: 'custom', validator: (value) => {
-                    if (!value) return { isValid: true, message: '' };
-                    // Taiwan tax ID is 8 digits
-                    if (!/^\d{8}$/.test(value)) {
-                        return { isValid: false, message: '統一編號必須是8位數字' };
-                    }
-                    return { isValid: true, message: '' };
-                }},
-                contact_person: { required: false, type: 'name', options: { minLength: 2, maxLength: 50 } },
-                address: { required: true, type: 'address' },
-                district: { required: false, type: 'name', options: { minLength: 2, maxLength: 50 } }
-            };
-            
-            // Get form data
-            const rawData = {
-                name: formData.get('name'),
-                client_code: formData.get('client_code'),
-                invoice_title: formData.get('invoice_title'),
-                tax_id: formData.get('tax_id'),
-                contact_person: formData.get('contact_person'),
-                address: formData.get('address'),
-                district: formData.get('district')
-            };
-            
-            // Validate form data
-            const validationResult = ValidationUtils.validateForm(rawData, validationRules);
-            
-            if (!validationResult.isValid) {
-                ValidationUtils.displayFormErrors(addClientForm, validationResult.errors);
-                showNotification('請修正表單錯誤', 'error');
-                return;
-            }
-            
-            // Sanitize data
-            const sanitizationSchema = {
-                name: { type: 'string', options: { maxLength: 100 } },
-                client_code: { type: 'clientCode' },
-                invoice_title: { type: 'string', options: { maxLength: 100 } },
-                tax_id: { type: 'string', options: { maxLength: 8 } },
-                contact_person: { type: 'string', options: { maxLength: 50 } },
-                address: { type: 'string', options: { maxLength: 200 } },
-                district: { type: 'string', options: { maxLength: 50 } }
-            };
-            
-            const sanitizedData = SanitizationUtils.sanitizeFormData(rawData, sanitizationSchema);
-            
-            // Add default values
-            const clientData = {
-                ...sanitizedData,
-                is_active: true
-            };
-            
-            try {
-                const response = await secureFetch(`${API_BASE}/clients`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(clientData)
-                });
-                
-                if (response.ok) {
-                    showNotification('客戶新增成功', 'success');
-                    addClientForm.reset();
-                    loadClients();
-                } else {
-                    const error = await response.json();
-                    showNotification(error.detail || '新增失敗', 'error');
-                }
-            } catch (error) {
-                showNotification('新增客戶失敗: ' + error.message, 'error');
-            }
-        });
-    }
+    form.setup('add-client-form', '/clients', {
+        method: 'POST',
+        validationRules: validationRules.client,
+        transform: data => ({ ...data, is_active: true }),
+        successMessage: '客戶新增成功',
+        onSuccess: () => {
+            document.getElementById('add-client-form').reset();
+            loadClients();
+        }
+    });
     
     // Add delivery form handler
-    const addDeliveryForm = document.getElementById('add-delivery-form');
-    if (addDeliveryForm) {
-        addDeliveryForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            // Clear previous errors
-            ValidationUtils.clearFormErrors(addDeliveryForm);
-            
-            const formData = new FormData(addDeliveryForm);
-            
-            // Define validation rules
-            const validationRules = {
-                client_id: { required: true, type: 'custom', validator: (value) => {
-                    if (!value || value === '') {
-                        return { isValid: false, message: '請選擇客戶' };
-                    }
-                    const num = parseInt(value);
-                    if (isNaN(num) || num <= 0) {
-                        return { isValid: false, message: '無效的客戶選擇' };
-                    }
-                    return { isValid: true, message: '' };
-                }},
-                scheduled_date: { required: true, type: 'date', options: { allowPast: false } },
-                scheduled_time_slot: { required: false, type: 'custom', validator: (value) => {
-                    const validSlots = ['上午 9:00-12:00', '下午 12:00-15:00', '下午 15:00-18:00', '晚上 18:00-21:00'];
-                    if (value && !validSlots.includes(value)) {
-                        return { isValid: false, message: '請選擇有效的時段' };
-                    }
-                    return { isValid: true, message: '' };
-                }},
-                gas_quantity: { required: true, type: 'quantity', options: { min: 1, max: 100 } },
-                delivery_address: { required: true, type: 'address' },
-                delivery_district: { required: false, type: 'name', options: { minLength: 2, maxLength: 50 } },
-                unit_price: { required: true, type: 'amount', options: { min: 0, max: 10000 } },
-                delivery_fee: { required: false, type: 'amount', options: { min: 0, max: 1000, allowZero: true } },
-                payment_method: { required: true, type: 'custom', validator: (value) => {
-                    const validMethods = ['cash', 'transfer', 'monthly_billing'];
-                    if (!validMethods.includes(value)) {
-                        return { isValid: false, message: '請選擇有效的付款方式' };
-                    }
-                    return { isValid: true, message: '' };
-                }},
-                empty_cylinders_to_return: { required: false, type: 'quantity', options: { min: 0, max: 100 } }
-            };
-            
-            // Get form data
-            const rawData = {
-                client_id: formData.get('client_id'),
-                scheduled_date: formData.get('scheduled_date'),
-                scheduled_time_slot: formData.get('scheduled_time_slot'),
-                gas_quantity: formData.get('gas_quantity'),
-                delivery_address: formData.get('delivery_address'),
-                delivery_district: formData.get('delivery_district'),
-                unit_price: formData.get('unit_price'),
-                delivery_fee: formData.get('delivery_fee'),
-                payment_method: formData.get('payment_method'),
-                empty_cylinders_to_return: formData.get('empty_cylinders_to_return')
-            };
-            
-            // Validate form data
-            const validationResult = ValidationUtils.validateForm(rawData, validationRules);
-            
-            if (!validationResult.isValid) {
-                ValidationUtils.displayFormErrors(addDeliveryForm, validationResult.errors);
-                showNotification('請修正表單錯誤', 'error');
-                return;
-            }
-            
-            // Sanitize data
-            const sanitizationSchema = {
-                client_id: { type: 'number', options: { type: 'integer', min: 1 } },
-                scheduled_date: { type: 'date' },
-                scheduled_time_slot: { type: 'string', options: { maxLength: 50 } },
-                gas_quantity: { type: 'number', options: { type: 'integer', min: 1, max: 100 } },
-                delivery_address: { type: 'string', options: { maxLength: 200 } },
-                delivery_district: { type: 'string', options: { maxLength: 50 } },
-                unit_price: { type: 'number', options: { type: 'float', min: 0, max: 10000, decimals: 2 } },
-                delivery_fee: { type: 'number', options: { type: 'float', min: 0, max: 1000, decimals: 2, defaultValue: 0 } },
-                payment_method: { type: 'string', options: { maxLength: 20 }, defaultValue: 'cash' },
-                requires_empty_cylinder_return: { type: 'boolean' },
-                empty_cylinders_to_return: { type: 'number', options: { type: 'integer', min: 0, max: 100, defaultValue: 0 } },
-                notes: { type: 'string', options: { maxLength: 500 } }
-            };
-            
-            // Add checkbox and notes handling
-            rawData.requires_empty_cylinder_return = formData.get('requires_empty_cylinder_return') === 'on';
-            rawData.notes = formData.get('notes');
-            
-            const deliveryData = SanitizationUtils.sanitizeFormData(rawData, sanitizationSchema);
-            
-            try {
-                const response = await secureFetch(`${API_BASE}/deliveries`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(deliveryData)
-                });
-                
-                if (response.ok) {
-                    showNotification('配送單新增成功', 'success');
-                    closeModal(document.getElementById('addDeliveryModal'));
-                    addDeliveryForm.reset();
-                    loadDeliveries();
-                } else {
-                    const error = await response.json();
-                    showNotification(error.detail || '新增失敗', 'error');
-                }
-            } catch (error) {
-                showNotification('新增配送單失敗: ' + error.message, 'error');
-            }
-        });
-    }
+    form.setup('add-delivery-form', '/deliveries', {
+        method: 'POST',
+        validationRules: validationRules.delivery,
+        transform: data => ({
+            ...data,
+            requires_empty_cylinder_return: data.requires_empty_cylinder_return === 'on'
+        }),
+        successMessage: '配送單新增成功',
+        onSuccess: () => {
+            closeModal(document.getElementById('addDeliveryModal'));
+            document.getElementById('add-delivery-form').reset();
+            loadDeliveries();
+        }
+    });
     
     // Add driver form handler
-    const addDriverForm = document.getElementById('add-driver-form');
-    if (addDriverForm) {
-        addDriverForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            // Clear previous errors
-            ValidationUtils.clearFormErrors(addDriverForm);
-            
-            const formData = new FormData(addDriverForm);
-            
-            // Define validation rules
-            const validationRules = {
-                name: { required: true, type: 'name', options: { minLength: 2, maxLength: 50 } },
-                employee_id: { required: true, type: 'custom', validator: (value) => {
-                    if (!value || value.trim() === '') {
-                        return { isValid: false, message: '員工編號不能為空' };
-                    }
-                    if (value.length < 3 || value.length > 20) {
-                        return { isValid: false, message: '員工編號長度必須在3-20個字符之間' };
-                    }
-                    if (!/^[A-Z0-9\-]+$/i.test(value)) {
-                        return { isValid: false, message: '員工編號只能包含字母、數字和連字符' };
-                    }
-                    return { isValid: true, message: '' };
-                }},
-                phone: { required: true, type: 'phone' },
-                id_number: { required: true, type: 'custom', validator: (value) => {
-                    // Taiwan ID number validation with checksum
-                    if (!value || value.trim() === '') {
-                        return { isValid: false, message: '身分證字號不能為空' };
-                    }
-                    const idPattern = /^[A-Z][12]\d{8}$/;
-                    if (!idPattern.test(value)) {
-                        return { isValid: false, message: '請輸入有效的台灣身分證字號' };
-                    }
-                    
-                    // Checksum validation for Taiwan ID
-                    const letterValues = {
-                        A: 10, B: 11, C: 12, D: 13, E: 14, F: 15, G: 16, H: 17, I: 34,
-                        J: 18, K: 19, L: 20, M: 21, N: 22, O: 35, P: 23, Q: 24, R: 25,
-                        S: 26, T: 27, U: 28, V: 29, W: 32, X: 30, Y: 31, Z: 33
-                    };
-                    
-                    const firstLetter = value.charAt(0);
-                    const letterValue = letterValues[firstLetter];
-                    const n1 = Math.floor(letterValue / 10);
-                    const n2 = letterValue % 10;
-                    
-                    let sum = n1 + n2 * 9;
-                    
-                    // Add weighted sum of digits
-                    for (let i = 1; i < 9; i++) {
-                        sum += parseInt(value.charAt(i)) * (9 - i);
-                    }
-                    
-                    // Add check digit
-                    sum += parseInt(value.charAt(9));
-                    
-                    if (sum % 10 !== 0) {
-                        return { isValid: false, message: '身分證字號檢查碼錯誤' };
-                    }
-                    
-                    return { isValid: true, message: '' };
-                }},
-                address: { required: true, type: 'address' },
-                emergency_contact: { required: true, type: 'name', options: { minLength: 2, maxLength: 50 } },
-                emergency_phone: { required: true, type: 'phone' },
-                license_number: { required: true, type: 'custom', validator: (value) => {
-                    if (!value || value.trim() === '') {
-                        return { isValid: false, message: '駕照號碼不能為空' };
-                    }
-                    if (value.length < 5 || value.length > 20) {
-                        return { isValid: false, message: '駕照號碼長度無效' };
-                    }
-                    return { isValid: true, message: '' };
-                }},
-                license_type: { required: true, type: 'custom', validator: (value) => {
-                    const validTypes = ['職業大貨車', '職業小型車', '普通大貨車', '普通小型車'];
-                    if (!value || !validTypes.includes(value)) {
-                        return { isValid: false, message: '請選擇有效的駕照類型' };
-                    }
-                    return { isValid: true, message: '' };
-                }},
-                license_expiry_date: { required: true, type: 'date', options: { allowPast: false } },
-                hire_date: { required: true, type: 'date' },
-                base_salary: { required: false, type: 'amount', options: { min: 0, max: 999999 } },
-                commission_rate: { required: false, type: 'amount', options: { min: 0, max: 100 } }
-            };
-            
-            // Get form data
-            const rawData = {};
-            for (const field of Object.keys(validationRules)) {
-                rawData[field] = formData.get(field);
-            }
-            
-            // Validate form data
-            const validationResult = ValidationUtils.validateForm(rawData, validationRules);
-            
-            if (!validationResult.isValid) {
-                ValidationUtils.displayFormErrors(addDriverForm, validationResult.errors);
-                showNotification('請修正表單錯誤', 'error');
-                return;
-            }
-            
-            // Sanitize data
-            const sanitizationSchema = {
-                name: { type: 'string', options: { maxLength: 50 } },
-                employee_id: { type: 'string', options: { maxLength: 20 } },
-                phone: { type: 'phone' },
-                id_number: { type: 'string', options: { maxLength: 10 } },
-                address: { type: 'string', options: { maxLength: 200 } },
-                emergency_contact: { type: 'string', options: { maxLength: 50 } },
-                emergency_phone: { type: 'phone' },
-                license_number: { type: 'string', options: { maxLength: 20 } },
-                license_type: { type: 'string', options: { maxLength: 20 } },
-                license_expiry_date: { type: 'date' },
-                hire_date: { type: 'date' },
-                base_salary: { type: 'number', options: { type: 'float', min: 0, max: 999999, decimals: 2, defaultValue: 0 } },
-                commission_rate: { type: 'number', options: { type: 'float', min: 0, max: 100, decimals: 2, defaultValue: 0 } }
-            };
-            
-            const driverData = SanitizationUtils.sanitizeFormData(rawData, sanitizationSchema);
-            
-            try {
-                const response = await secureFetch(`${API_BASE}/drivers`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(driverData)
-                });
-                
-                if (response.ok) {
-                    showNotification('司機新增成功', 'success');
-                    closeModal(document.getElementById('addDriverModal'));
-                    addDriverForm.reset();
-                    loadDrivers();
-                } else {
-                    const error = await response.json();
-                    showNotification(error.detail || '新增失敗', 'error');
-                }
-            } catch (error) {
-                showNotification('新增司機失敗: ' + error.message, 'error');
-            }
-        });
-    }
+    form.setup('add-driver-form', '/drivers', {
+        method: 'POST',
+        validationRules: validationRules.driver,
+        successMessage: '司機新增成功',
+        onSuccess: () => {
+            closeModal(document.getElementById('addDriverModal'));
+            document.getElementById('add-driver-form').reset();
+            loadDrivers();
+        }
+    });
     
     // Add vehicle form handler
-    const addVehicleForm = document.getElementById('add-vehicle-form');
-    if (addVehicleForm) {
-        addVehicleForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            // Clear previous errors
-            ValidationUtils.clearFormErrors(addVehicleForm);
-            
-            const formData = new FormData(addVehicleForm);
-            
-            // Define validation rules
-            const validationRules = {
-                plate_number: { required: true, type: 'licensePlate' },
-                vehicle_type: { required: true, type: 'custom', validator: (value) => {
-                    const validTypes = ['truck', 'van', 'motorcycle'];
-                    if (!value || !validTypes.includes(value)) {
-                        return { isValid: false, message: '請選擇有效的車型' };
-                    }
-                    return { isValid: true, message: '' };
-                }},
-                brand: { required: true, type: 'name', options: { minLength: 2, maxLength: 50 } },
-                model: { required: true, type: 'name', options: { minLength: 1, maxLength: 50, allowNumbers: true } },
-                year: { required: true, type: 'custom', validator: (value) => {
-                    const year = parseInt(value);
-                    if (isNaN(year)) {
-                        return { isValid: false, message: '請輸入有效的年份' };
-                    }
-                    const currentYear = new Date().getFullYear();
-                    if (year < 1990 || year > currentYear + 1) {
-                        return { isValid: false, message: `年份必須在1990到${currentYear + 1}之間` };
-                    }
-                    return { isValid: true, message: '' };
-                }},
-                fuel_type: { required: true, type: 'custom', validator: (value) => {
-                    const validTypes = ['gasoline', 'diesel', 'electric', 'hybrid'];
-                    if (!value || !validTypes.includes(value)) {
-                        return { isValid: false, message: '請選擇有效的燃料類型' };
-                    }
-                    return { isValid: true, message: '' };
-                }},
-                max_load_kg: { required: true, type: 'amount', options: { min: 0, max: 50000 } },
-                max_cylinders: { required: true, type: 'quantity', options: { min: 0, max: 1000 } }
-            };
-            
-            // Get form data
-            const rawData = {};
-            for (const field of Object.keys(validationRules)) {
-                rawData[field] = formData.get(field);
-            }
-            
-            // Validate form data
-            const validationResult = ValidationUtils.validateForm(rawData, validationRules);
-            
-            if (!validationResult.isValid) {
-                ValidationUtils.displayFormErrors(addVehicleForm, validationResult.errors);
-                showNotification('請修正表單錯誤', 'error');
-                return;
-            }
-            
-            // Sanitize data
-            const sanitizationSchema = {
-                plate_number: { type: 'licensePlate' },
-                vehicle_type: { type: 'string', options: { maxLength: 20 } },
-                brand: { type: 'string', options: { maxLength: 50 } },
-                model: { type: 'string', options: { maxLength: 50 } },
-                year: { type: 'number', options: { type: 'integer', min: 1990, max: new Date().getFullYear() + 1 } },
-                fuel_type: { type: 'string', options: { maxLength: 20 } },
-                max_load_kg: { type: 'number', options: { type: 'float', min: 0, max: 50000, decimals: 2 } },
-                max_cylinders: { type: 'number', options: { type: 'integer', min: 0, max: 1000 } }
-            };
-            
-            const vehicleData = SanitizationUtils.sanitizeFormData(rawData, sanitizationSchema);
-            
-            try {
-                const response = await secureFetch(`${API_BASE}/vehicles`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(vehicleData)
-                });
-                
-                if (response.ok) {
-                    showNotification('車輛新增成功', 'success');
-                    closeModal(document.getElementById('addVehicleModal'));
-                    addVehicleForm.reset();
-                    loadVehicles();
-                } else {
-                    const error = await response.json();
-                    showNotification(error.detail || '新增失敗', 'error');
-                }
-            } catch (error) {
-                showNotification('新增車輛失敗: ' + error.message, 'error');
-            }
-        });
-    }
+    form.setup('add-vehicle-form', '/vehicles', {
+        method: 'POST',
+        validationRules: validationRules.vehicle,
+        successMessage: '車輛新增成功',
+        onSuccess: () => {
+            closeModal(document.getElementById('addVehicleModal'));
+            document.getElementById('add-vehicle-form').reset();
+            loadVehicles();
+        }
+    });
 }
 
 // Load drivers
 async function loadDrivers() {
-    try {
-        const response = await fetch(`${API_BASE}/drivers`);
-        const data = await response.json();
-        
-        allDrivers = data.items || [];
-        
-        const tbody = document.getElementById('drivers-tbody');
-        if (tbody) {
-            tbody.innerHTML = '';
-            
-            if (allDrivers.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="6" class="px-6 py-4 text-center text-gray-500">
-                            沒有司機資料
-                        </td>
-                    </tr>
-                `;
-                return;
-            }
-            
-            allDrivers.forEach(driver => {
-                const row = document.createElement('tr');
-                row.className = 'hover:bg-gray-50 transition-colors';
-                row.innerHTML = `
-                    <td class="px-6 py-4 whitespace-nowrap text-sm">${driver.id}</td>
-                    <td class="px-6 py-4 whitespace-nowrap font-medium">${driver.name}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm">${driver.phone || '-'}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm">${driver.employee_id || '-'}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="px-2 py-1 text-xs rounded-full ${driver.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
-                            ${driver.is_active ? '在職' : '離職'}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm">
-                        <button onclick="editDriver(${driver.id})" class="text-blue-600 hover:text-blue-900 mr-2" title="編輯">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button onclick="toggleDriverStatus(${driver.id}, ${driver.is_active})" class="text-orange-600 hover:text-orange-900" title="${driver.is_active ? '停用' : '啟用'}">
-                            <i class="fas fa-${driver.is_active ? 'pause' : 'play'}"></i>
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
+    const data = await api.get('/drivers');
+    allDrivers = data.items || [];
+    renderDriversTable(allDrivers);
+    updateDriverOptions();
+}
+
+// Render drivers table
+function renderDriversTable(drivers) {
+    const columns = [
+        {
+            // ID
+            field: 'id',
+            class: 'px-6 py-4 whitespace-nowrap text-sm'
+        },
+        {
+            // Name
+            field: 'name',
+            class: 'px-6 py-4 whitespace-nowrap font-medium'
+        },
+        {
+            // Phone
+            field: 'phone',
+            class: 'px-6 py-4 whitespace-nowrap text-sm'
+        },
+        {
+            // Employee ID
+            field: 'employee_id',
+            class: 'px-6 py-4 whitespace-nowrap text-sm'
+        },
+        {
+            // Status
+            class: 'px-6 py-4 whitespace-nowrap',
+            render: d => table.statusBadge(d.is_active ? 'active' : 'inactive', {
+                active: { text: '在職', class: 'bg-green-100 text-green-800' },
+                inactive: { text: '離職', class: 'bg-red-100 text-red-800' }
+            })
+        },
+        {
+            // Actions
+            class: 'px-6 py-4 whitespace-nowrap text-sm',
+            render: d => table.actionButtons([
+                { 
+                    icon: 'fas fa-edit', 
+                    title: '編輯', 
+                    class: 'text-blue-600 hover:text-blue-900 mr-2', 
+                    onclick: `editDriver(${d.id})` 
+                },
+                { 
+                    icon: `fas fa-${d.is_active ? 'pause' : 'play'}`, 
+                    title: d.is_active ? '停用' : '啟用', 
+                    class: 'text-orange-600 hover:text-orange-900', 
+                    onclick: `toggleDriverStatus(${d.id}, ${d.is_active})` 
+                }
+            ])
         }
-        
-        // Update driver select options in forms
-        updateDriverOptions();
-        
-    } catch (error) {
-        console.error('Error loading drivers:', error);
-        showNotification('載入司機資料失敗', 'error');
-    }
+    ];
+    
+    table.render('drivers-tbody', drivers, columns, '沒有司機資料');
 }
 
 // Load vehicles
 async function loadVehicles() {
-    try {
-        const response = await fetch(`${API_BASE}/vehicles`);
-        const data = await response.json();
-        
-        allVehicles = data.items || [];
-        
-        const tbody = document.getElementById('vehicles-tbody');
-        if (tbody) {
-            tbody.innerHTML = '';
-            
-            if (allVehicles.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="6" class="px-6 py-4 text-center text-gray-500">
-                            沒有車輛資料
-                        </td>
-                    </tr>
-                `;
-                return;
-            }
-            
-            allVehicles.forEach(vehicle => {
-                const row = document.createElement('tr');
-                row.className = 'hover:bg-gray-50 transition-colors';
-                row.innerHTML = `
-                    <td class="px-6 py-4 whitespace-nowrap text-sm">${vehicle.id}</td>
-                    <td class="px-6 py-4 whitespace-nowrap font-medium">${vehicle.plate_number}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm">${vehicle.vehicle_type === 1 ? '汽車' : '機車'}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm">${vehicle.last_maintenance ? formatDate(vehicle.last_maintenance) : '-'}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="px-2 py-1 text-xs rounded-full ${vehicle.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
-                            ${vehicle.is_active ? '可用' : '停用'}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm">
-                        <button onclick="editVehicle(${vehicle.id})" class="text-blue-600 hover:text-blue-900 mr-2" title="編輯">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button onclick="toggleVehicleStatus(${vehicle.id}, ${vehicle.is_active})" class="text-orange-600 hover:text-orange-900" title="${vehicle.is_active ? '停用' : '啟用'}">
-                            <i class="fas fa-${vehicle.is_active ? 'pause' : 'play'}"></i>
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
+    const data = await api.get('/vehicles');
+    allVehicles = data.items || [];
+    renderVehiclesTable(allVehicles);
+}
+
+// Render vehicles table
+function renderVehiclesTable(vehicles) {
+    const columns = [
+        {
+            // ID
+            field: 'id',
+            class: 'px-6 py-4 whitespace-nowrap text-sm'
+        },
+        {
+            // Plate Number
+            field: 'plate_number',
+            class: 'px-6 py-4 whitespace-nowrap font-medium'
+        },
+        {
+            // Vehicle Type
+            class: 'px-6 py-4 whitespace-nowrap text-sm',
+            render: v => v.vehicle_type === 1 ? '汽車' : '機車'
+        },
+        {
+            // Last Maintenance
+            class: 'px-6 py-4 whitespace-nowrap text-sm',
+            render: v => v.last_maintenance ? formatDate(v.last_maintenance) : '-'
+        },
+        {
+            // Status
+            class: 'px-6 py-4 whitespace-nowrap',
+            render: v => table.statusBadge(v.is_active ? 'active' : 'inactive', {
+                active: { text: '可用', class: 'bg-green-100 text-green-800' },
+                inactive: { text: '停用', class: 'bg-red-100 text-red-800' }
+            })
+        },
+        {
+            // Actions
+            class: 'px-6 py-4 whitespace-nowrap text-sm',
+            render: v => table.actionButtons([
+                { 
+                    icon: 'fas fa-edit', 
+                    title: '編輯', 
+                    class: 'text-blue-600 hover:text-blue-900 mr-2', 
+                    onclick: `editVehicle(${v.id})` 
+                },
+                { 
+                    icon: `fas fa-${v.is_active ? 'pause' : 'play'}`, 
+                    title: v.is_active ? '停用' : '啟用', 
+                    class: 'text-orange-600 hover:text-orange-900', 
+                    onclick: `toggleVehicleStatus(${v.id}, ${v.is_active})` 
+                }
+            ])
         }
-        
-    } catch (error) {
-        console.error('Error loading vehicles:', error);
-        showNotification('載入車輛資料失敗', 'error');
-    }
+    ];
+    
+    table.render('vehicles-tbody', vehicles, columns, '沒有車輛資料');
 }
 
 // Toggle driver status
 async function toggleDriverStatus(driverId, currentStatus) {
     if (!confirm(`確定要${currentStatus ? '停用' : '啟用'}此司機嗎？`)) return;
     
-    try {
-        const response = await fetch(`${API_BASE}/drivers/${driverId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ is_active: !currentStatus })
-        });
-        
-        if (response.ok) {
-            showNotification(`司機已${!currentStatus ? '啟用' : '停用'}`, 'success');
-            loadDrivers();
-        } else {
-            throw new Error('Update failed');
-        }
-    } catch (error) {
-        showNotification('更新失敗', 'error');
-    }
+    await api.put(`/drivers/${driverId}`, { is_active: !currentStatus });
+    await loadDrivers();
+}
+
+// Delete driver
+async function deleteDriver(driverId) {
+    if (!confirm('確定要刪除此司機嗎？\n\n⚠️ 警告：此操作無法復原！')) return;
+    
+    await api.delete(`/drivers/${driverId}`);
+    await loadDrivers();
 }
 
 // Toggle vehicle status
 async function toggleVehicleStatus(vehicleId, currentStatus) {
     if (!confirm(`確定要${currentStatus ? '停用' : '啟用'}此車輛嗎？`)) return;
     
-    try {
-        const response = await fetch(`${API_BASE}/vehicles/${vehicleId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ is_active: !currentStatus })
-        });
-        
-        if (response.ok) {
-            showNotification(`車輛已${!currentStatus ? '啟用' : '停用'}`, 'success');
-            loadVehicles();
-        } else {
-            throw new Error('Update failed');
-        }
-    } catch (error) {
-        showNotification('更新失敗', 'error');
-    }
+    await api.put(`/vehicles/${vehicleId}`, { is_active: !currentStatus });
+    await loadVehicles();
+}
+
+// Delete vehicle
+async function deleteVehicle(vehicleId) {
+    if (!confirm('確定要刪除此車輛嗎？\n\n⚠️ 警告：此操作無法復原！')) return;
+    
+    await api.delete(`/vehicles/${vehicleId}`);
+    await loadVehicles();
 }
 
 // Update driver options in select elements
@@ -3375,127 +3009,115 @@ function setupRouteDateDefaults() {
 
 // Load drivers for filter dropdown
 async function loadDriversForFilter(selectId) {
-    try {
-        const response = await fetch(`${API_BASE}/drivers?is_active=true`);
-        const data = await response.json();
-        const drivers = data.items || [];
-        
-        const select = document.getElementById(selectId);
-        if (select) {
-            const currentValue = select.value;
-            select.innerHTML = '<option value="">所有司機</option>';
-            drivers.forEach(driver => {
-                const option = document.createElement('option');
-                option.value = driver.id;
-                option.textContent = `${driver.name} (${driver.employee_id})`;
-                select.appendChild(option);
-            });
-            select.value = currentValue;
-        }
-    } catch (error) {
-        console.error('Error loading drivers for filter:', error);
+    const data = await api.get('/drivers?is_active=true');
+    const drivers = data.items || [];
+    
+    const select = document.getElementById(selectId);
+    if (select) {
+        const currentValue = select.value;
+        select.innerHTML = '<option value="">所有司機</option>';
+        drivers.forEach(driver => {
+            const option = document.createElement('option');
+            option.value = driver.id;
+            option.textContent = `${driver.name} (${driver.employee_id})`;
+            select.appendChild(option);
+        });
+        select.value = currentValue;
     }
 }
 
 // Load routes
 async function loadRoutes(page = 1) {
-    try {
-        // Setup date defaults if not set
-        if (!routeFilters.dateFrom || !routeFilters.dateTo) {
-            setupRouteDateDefaults();
-        }
-        
-        // Build query parameters
-        const params = new URLSearchParams({
-            skip: (page - 1) * 10,
-            limit: 10
-        });
-        
-        if (routeFilters.dateFrom) params.append('start_date', routeFilters.dateFrom);
-        if (routeFilters.dateTo) params.append('end_date', routeFilters.dateTo);
-        if (routeFilters.area) params.append('area', routeFilters.area);
-        if (routeFilters.driverId) params.append('driver_id', routeFilters.driverId);
-        
-        const response = await fetch(`${API_BASE}/routes?${params}`);
-        if (!response.ok) throw new Error('Failed to fetch routes');
-        
-        const data = await response.json();
-        allRoutes = data.items || [];
-        currentRoutePage = page;
-        
-        // Load drivers for filter
-        await loadDriversForFilter('route-driver');
-        
-        displayRoutes(allRoutes);
-        updateRoutePagination(data.total, data.page, data.page_size);
-        
-    } catch (error) {
-        console.error('Error loading routes:', error);
-        showNotification('載入路線失敗', 'error');
+    // Setup date defaults if not set
+    if (!routeFilters.dateFrom || !routeFilters.dateTo) {
+        setupRouteDateDefaults();
     }
+    
+    // Build query parameters
+    const params = new URLSearchParams({
+        skip: (page - 1) * 10,
+        limit: 10
+    });
+    
+    if (routeFilters.dateFrom) params.append('start_date', routeFilters.dateFrom);
+    if (routeFilters.dateTo) params.append('end_date', routeFilters.dateTo);
+    if (routeFilters.area) params.append('area', routeFilters.area);
+    if (routeFilters.driverId) params.append('driver_id', routeFilters.driverId);
+    
+    const data = await api.get(`/routes?${params}`);
+    allRoutes = data.items || [];
+    currentRoutePage = page;
+    
+    // Load drivers for filter
+    await loadDriversForFilter('route-driver');
+    
+    displayRoutes(allRoutes);
+    updateRoutePagination(data.total, data.page, data.page_size);
 }
 
 // Display routes in table
 function displayRoutes(routes) {
-    const tbody = document.getElementById('routes-tbody');
-    if (!tbody) return;
+    const columns = [
+        {
+            // Date
+            class: 'px-6 py-4 whitespace-nowrap text-sm',
+            render: r => formatDate(r.route_date)
+        },
+        {
+            // Route Name
+            class: 'px-6 py-4 whitespace-nowrap',
+            render: r => `<div class="text-sm font-medium text-gray-900">${r.route_name}</div>`
+        },
+        {
+            // Area
+            field: 'area',
+            class: 'px-6 py-4 whitespace-nowrap text-sm'
+        },
+        {
+            // Driver
+            field: 'driver_name',
+            class: 'px-6 py-4 whitespace-nowrap text-sm'
+        },
+        {
+            // Vehicle
+            field: 'vehicle_plate',
+            class: 'px-6 py-4 whitespace-nowrap text-sm'
+        },
+        {
+            // Total Clients
+            field: 'total_clients',
+            class: 'px-6 py-4 whitespace-nowrap text-sm text-center'
+        },
+        {
+            // Distance
+            class: 'px-6 py-4 whitespace-nowrap text-sm text-center',
+            render: r => `${r.total_distance_km.toFixed(1)} km`
+        },
+        {
+            // Status
+            class: 'px-6 py-4 whitespace-nowrap',
+            render: r => table.statusBadge(r.is_optimized ? 'optimized' : 'manual', {
+                optimized: { text: '已優化', class: 'bg-green-100 text-green-800' },
+                manual: { text: '手動', class: 'bg-gray-100 text-gray-800' }
+            })
+        },
+        {
+            // Actions
+            class: 'px-6 py-4 whitespace-nowrap text-sm font-medium',
+            render: r => table.actionButtons([
+                { icon: 'fas fa-eye', title: '檢視', class: 'text-blue-600 hover:text-blue-900 mr-2', 
+                  onclick: `viewRoute(${r.id})` },
+                { icon: 'fas fa-map-marked-alt', title: '地圖', class: 'text-green-600 hover:text-green-900 mr-2', 
+                  onclick: `showRouteMap(${r.id})` },
+                { icon: 'fas fa-edit', title: '編輯', class: 'text-yellow-600 hover:text-yellow-900 mr-2', 
+                  onclick: `editRoute(${r.id})` },
+                { icon: 'fas fa-trash', title: '刪除', class: 'text-red-600 hover:text-red-900', 
+                  onclick: `deleteRoute(${r.id})` }
+            ])
+        }
+    ];
     
-    if (routes.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="9" class="px-6 py-4 text-center text-gray-500">
-                    沒有找到路線資料
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    tbody.innerHTML = routes.map(route => `
-        <tr class="hover:bg-gray-50">
-            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                ${formatDate(route.route_date)}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm font-medium text-gray-900">${route.route_name}</div>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                ${route.area}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                ${route.driver_name || '-'}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                ${route.vehicle_plate || '-'}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
-                ${route.total_clients}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
-                ${route.total_distance_km.toFixed(1)} km
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap">
-                ${route.is_optimized ? 
-                    '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">已優化</span>' :
-                    '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">手動</span>'
-                }
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                <button onclick="viewRoute(${route.id})" class="text-blue-600 hover:text-blue-900 mr-2" title="檢視">
-                    <i class="fas fa-eye"></i>
-                </button>
-                <button onclick="showRouteMap(${route.id})" class="text-green-600 hover:text-green-900 mr-2" title="地圖">
-                    <i class="fas fa-map-marked-alt"></i>
-                </button>
-                <button onclick="editRoute(${route.id})" class="text-yellow-600 hover:text-yellow-900 mr-2" title="編輯">
-                    <i class="fas fa-edit"></i>
-                </button>
-                <button onclick="deleteRoute(${route.id})" class="text-red-600 hover:text-red-900" title="刪除">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </td>
-        </tr>
-    `).join('');
+    table.render('routes-tbody', routes, columns, '沒有找到路線資料');
     
     // Update showing count
     const showingElement = document.getElementById('routes-showing');
@@ -4044,23 +3666,8 @@ async function editRoute(routeId) {
 async function deleteRoute(routeId) {
     if (!confirm('確定要刪除這條路線嗎？')) return;
     
-    try {
-        const response = await fetch(`${API_BASE}/routes/${routeId}`, {
-            method: 'DELETE'
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Delete failed');
-        }
-        
-        showNotification('路線已刪除', 'success');
-        await loadRoutes(currentRoutePage);
-        
-    } catch (error) {
-        console.error('Error deleting route:', error);
-        showNotification(error.message || '刪除失敗', 'error');
-    }
+    await api.delete(`/routes/${routeId}`);
+    await loadRoutes(currentRoutePage);
 }
 
 // Show manual route creation modal
@@ -4089,32 +3696,24 @@ async function showAddRouteModal() {
 
 // Load drivers and vehicles for manual route creation
 async function loadDriversAndVehiclesForRoute() {
-    try {
-        // Load drivers
-        const driversResponse = await fetch(`${API_BASE}/drivers?is_active=true`);
-        const driversData = await driversResponse.json();
-        const drivers = driversData.items || [];
-        
-        const driverSelect = document.querySelector('#add-route-form select[name="driver_id"]');
-        if (driverSelect) {
-            driverSelect.innerHTML = '<option value="">請選擇司機</option>' + 
-                drivers.map(driver => `<option value="${driver.id}">${driver.name}</option>`).join('');
-        }
-        
-        // Load vehicles
-        const vehiclesResponse = await fetch(`${API_BASE}/vehicles?is_active=true`);
-        const vehiclesData = await vehiclesResponse.json();
-        const vehicles = vehiclesData.items || [];
-        
-        const vehicleSelect = document.querySelector('#add-route-form select[name="vehicle_id"]');
-        if (vehicleSelect) {
-            vehicleSelect.innerHTML = '<option value="">請選擇車輛</option>' + 
-                vehicles.map(vehicle => `<option value="${vehicle.id}">${vehicle.plate_number} - ${vehicle.vehicle_type}</option>`).join('');
-        }
-        
-    } catch (error) {
-        console.error('Error loading drivers and vehicles:', error);
-        showNotification('載入資源失敗', 'error');
+    // Load drivers
+    const driversData = await api.get('/drivers?is_active=true');
+    const drivers = driversData.items || [];
+    
+    const driverSelect = document.querySelector('#add-route-form select[name="driver_id"]');
+    if (driverSelect) {
+        driverSelect.innerHTML = '<option value="">請選擇司機</option>' + 
+            drivers.map(driver => `<option value="${driver.id}">${driver.name}</option>`).join('');
+    }
+    
+    // Load vehicles
+    const vehiclesData = await api.get('/vehicles?is_active=true');
+    const vehicles = vehiclesData.items || [];
+    
+    const vehicleSelect = document.querySelector('#add-route-form select[name="vehicle_id"]');
+    if (vehicleSelect) {
+        vehicleSelect.innerHTML = '<option value="">請選擇車輛</option>' + 
+            vehicles.map(vehicle => `<option value="${vehicle.id}">${vehicle.plate_number} - ${vehicle.vehicle_type}</option>`).join('');
     }
 }
 
@@ -4821,3 +4420,8 @@ window.updateAlgorithmDescription = updateAlgorithmDescription;
 window.previewSchedule = previewSchedule;
 window.viewScheduleDetails = viewScheduleDetails;
 window.applySchedule = applySchedule;
+
+// Delete functions
+window.deleteClient = deleteClient;
+window.deleteDriver = deleteDriver;
+window.deleteVehicle = deleteVehicle;
