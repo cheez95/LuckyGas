@@ -12,9 +12,7 @@
         'utilities.js',           // Core utilities (api, table, html, form)
         'ui-components.js',       // UI component factories
         'table-renderers.js',     // Table rendering functions
-        'form-validators.js',     // Form validation logic
         'modal-handlers.js',      // Modal management
-        'chart-handlers.js',      // Chart rendering
         'client-handlers.js',     // Client-related handlers
         'delivery-handlers.js',   // Delivery-related handlers
         'driver-handlers.js',     // Driver management

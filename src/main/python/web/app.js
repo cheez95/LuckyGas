@@ -369,7 +369,7 @@ function showSection(section) {
                             }
                         }
                     }
-                    loadDeliveries();
+                    window.loadDeliveries();
                     break;
                 case 'routes':
                     loadRoutes();
@@ -389,6 +389,10 @@ function showSection(section) {
 
 // Dashboard with real data
 async function loadDashboard() {
+    // Initialize chart references
+    if (!window.deliveryChart) window.deliveryChart = null;
+    if (!window.statusChart) window.statusChart = null;
+    
     // Show loading state
     ['total-clients', 'today-deliveries', 'available-drivers', 'available-vehicles'].forEach(id => {
         document.getElementById(id).textContent = '載入中...';
@@ -590,22 +594,22 @@ function setupFilterHandlers() {
     // Delivery filters
     document.getElementById('delivery-date-from')?.addEventListener('change', (e) => {
         deliveryFilters.dateFrom = e.target.value;
-        loadDeliveries(1);
+        window.loadDeliveries(1);
     });
     
     document.getElementById('delivery-date-to')?.addEventListener('change', (e) => {
         deliveryFilters.dateTo = e.target.value;
-        loadDeliveries(1);
+        window.loadDeliveries(1);
     });
     
     document.getElementById('delivery-status')?.addEventListener('change', (e) => {
         deliveryFilters.status = e.target.value;
-        loadDeliveries(1);
+        window.loadDeliveries(1);
     });
     
     document.getElementById('delivery-driver')?.addEventListener('change', (e) => {
         deliveryFilters.driverId = e.target.value;
-        loadDeliveries(1);
+        window.loadDeliveries(1);
     });
 }
 
@@ -739,7 +743,7 @@ function showNotification(message, type = 'info') {
 // exportDeliveries - moved to delivery-handlers.js module
 
 // Quick stats refresh
-async function refreshStats() {
+async function refreshStats(event) {
     const btn = event.target;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-sync fa-spin"></i>';
@@ -984,7 +988,7 @@ async function viewDriverDetails(driverId) {
             </div>
         `;
         
-        const modal = createModal(fullContent, '司機詳細資料');
+        createModal(fullContent, '司機詳細資料');
 }
 
 // Toggle driver availability
@@ -1068,7 +1072,7 @@ async function viewDriverDeliveries(driverId) {
             </div>
         `;
         
-        const modal = createModal(fullContent, '司機配送記錄');
+        createModal(fullContent, '司機配送記錄');
 }
 
 // View vehicle details
@@ -1143,7 +1147,7 @@ async function viewVehicleDetails(vehicleId) {
             </div>
         `;
         
-        const modal = createModal(fullContent, '車輛詳細資料');
+        createModal(fullContent, '車輛詳細資料');
 }
 
 // viewDeliveryDetails - moved to delivery-handlers.js module
