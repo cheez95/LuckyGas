@@ -11,6 +11,7 @@
     const moduleLoadOrder = [
         'utilities.js',           // Core utilities (api, table, html, form)
         'ui-components.js',       // UI component factories
+        'table-config.js',        // Table configurations
         'table-renderers.js',     // Table rendering functions
         'modal-handlers.js',      // Modal management
         'client-handlers.js',     // Client-related handlers

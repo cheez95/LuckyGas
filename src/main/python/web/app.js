@@ -1249,8 +1249,9 @@ async function showRoutePlanModal() {
 async function loadAvailableDriversAndVehicles() {
     try {
         // Load drivers
-        const driversResponse = await fetch(`${API_BASE}/drivers?is_available=true`);
-        const driversData = await driversResponse.json();
+        const driversData = await api.get('/drivers?is_available=true', {
+            skipNotification: true
+        }).catch(() => ({ items: [] }));
         const drivers = driversData.items || [];
         
         const driversContainer = document.getElementById('route-plan-drivers');
@@ -1264,8 +1265,9 @@ async function loadAvailableDriversAndVehicles() {
         }
         
         // Load vehicles
-        const vehiclesResponse = await fetch(`${API_BASE}/vehicles?is_available=true`);
-        const vehiclesData = await vehiclesResponse.json();
+        const vehiclesData = await api.get('/vehicles?is_available=true', {
+            skipNotification: true
+        }).catch(() => ({ items: [] }));
         const vehicles = vehiclesData.items || [];
         
         const vehiclesContainer = document.getElementById('route-plan-vehicles');
@@ -1319,21 +1321,12 @@ document.getElementById('route-plan-form')?.addEventListener('submit', async (e)
     }
     
     try {
-        const response = await fetch(`${API_BASE}/routes/plan`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestData)
+        const result = await api.post('/routes/plan', requestData, {
+            successMessage: result => result.message,
+            errorMessage: error => error.detail || 'Route planning failed'
         });
         
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Route planning failed');
-        }
-        
-        const result = await response.json();
-        
         if (result.success) {
-            showNotification(result.message, 'success');
             closeModal('routePlanModal');
             
             // Show optimization results
@@ -1426,10 +1419,9 @@ function showOptimizationResults(result) {
 // View route details
 async function viewRoute(routeId) {
     try {
-        const response = await fetch(`${API_BASE}/routes/${routeId}`);
-        if (!response.ok) throw new Error('Failed to fetch route');
-        
-        const route = await response.json();
+        const route = await api.get(`/routes/${routeId}`, {
+            errorMessage: '載入路線詳情失敗'
+        });
         
         const modal = document.getElementById('routeDetailsModal');
         const content = document.getElementById('route-details-content');
@@ -1534,10 +1526,9 @@ async function viewRoute(routeId) {
 // Show route map
 async function showRouteMap(routeId) {
     try {
-        const response = await fetch(`${API_BASE}/routes/${routeId}/map`);
-        if (!response.ok) throw new Error('Failed to fetch route map data');
-        
-        const mapData = await response.json();
+        const mapData = await api.get(`/routes/${routeId}/map`, {
+            errorMessage: '載入地圖失敗'
+        });
         
         // For now, just show the data
         // Display map data in a modal
@@ -1578,10 +1569,9 @@ async function showRouteMap(routeId) {
 async function editRoute(routeId) {
     try {
         // Fetch route details
-        const response = await fetch(`${API_BASE}/routes/${routeId}`);
-        if (!response.ok) throw new Error('Failed to fetch route');
-        
-        const route = await response.json();
+        const route = await api.get(`/routes/${routeId}`, {
+            errorMessage: '載入路線失敗'
+        });
         
         // Create edit modal
         const modalContent = `
@@ -1678,15 +1668,11 @@ async function editRoute(routeId) {
             };
             
             try {
-                const updateResponse = await fetch(`${API_BASE}/routes/${routeId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(updateData)
+                await api.put(`/routes/${routeId}`, updateData, {
+                    successMessage: '路線已更新',
+                    errorMessage: '更新失敗'
                 });
                 
-                if (!updateResponse.ok) throw new Error('Update failed');
-                
-                showNotification('路線已更新', 'success');
                 closeModal(modal);
                 await loadRoutes(currentRoutePage);
                 
@@ -1738,8 +1724,9 @@ async function showAddRouteModal() {
 // Load available clients for route
 async function loadAvailableClients() {
     try {
-        const response = await fetch(`${API_BASE}/clients?is_active=true&page_size=100`);
-        const data = await response.json();
+        const data = await api.get('/clients?is_active=true&page_size=100', {
+            errorMessage: '載入客戶失敗'
+        });
         const clients = data.items || [];
         
         displayAvailableClients(clients);
@@ -1856,18 +1843,11 @@ document.getElementById('add-route-form')?.addEventListener('submit', async (e) 
     };
     
     try {
-        const response = await fetch(`${API_BASE}/routes`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestData)
+        await api.post('/routes', requestData, {
+            successMessage: '路線已建立',
+            errorMessage: error => error.detail || '建立失敗'
         });
         
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Create failed');
-        }
-        
-        showNotification('路線已建立', 'success');
         closeModal('addRouteModal');
         await loadRoutes(1);
         
@@ -1919,8 +1899,9 @@ async function showSchedulingModal() {
 async function loadSchedulingResources() {
     try {
         // Load available drivers
-        const driversResponse = await fetch(`${API_BASE}/drivers?is_available=true`);
-        const drivers = await driversResponse.json();
+        const drivers = await api.get('/drivers?is_available=true', {
+            errorMessage: '載入資源失敗'
+        }).catch(() => ({ items: [] }));
         
         const driverSelect = document.querySelector('select[name="driver_ids"]');
         driverSelect.innerHTML = '';
@@ -1935,8 +1916,9 @@ async function loadSchedulingResources() {
         }
         
         // Load available vehicles
-        const vehiclesResponse = await fetch(`${API_BASE}/vehicles?is_active=true`);
-        const vehicles = await vehiclesResponse.json();
+        const vehicles = await api.get('/vehicles?is_active=true', {
+            errorMessage: '載入資源失敗'
+        }).catch(() => ({ items: [] }));
         
         const vehicleSelect = document.querySelector('select[name="vehicle_ids"]');
         vehicleSelect.innerHTML = '';
@@ -2115,15 +2097,13 @@ async function handleSchedulingFormSubmit(e) {
                 requestData.vehicle_ids = vehicleIds;
             }
             
-            const response = await fetch(`${API_BASE}/scheduling/generate`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestData)
+            const result = await api.post('/scheduling/generate', requestData, {
+                skipNotification: true
+            }).catch(error => {
+                return { success: false, detail: error.message || '排程失敗' };
             });
             
-            const result = await response.json();
-            
-            if (response.ok && result.success) {
+            if (result.success) {
                 successCount++;
                 // Store the full result for apply function
                 scheduleDataMap.set(scheduleDate, result);
@@ -2162,8 +2142,9 @@ async function handleSchedulingFormSubmit(e) {
 async function viewScheduleDetails(date) {
     // Get the scheduling result for this date
     try {
-        const response = await fetch(`${API_BASE}/scheduling/metrics/${date}`);
-        const metrics = await response.json();
+        const metrics = await api.get(`/scheduling/metrics/${date}`, {
+            skipNotification: true
+        }).catch(() => ({ metrics: null }));
         
         let modalContent = `
             <div class="space-y-4">
@@ -2221,8 +2202,9 @@ async function viewScheduleDetails(date) {
         }
         
         // Check for conflicts
-        const conflictsResponse = await fetch(`${API_BASE}/scheduling/conflicts/${date}`);
-        const conflicts = await conflictsResponse.json();
+        const conflicts = await api.get(`/scheduling/conflicts/${date}`, {
+            skipNotification: true
+        }).catch(() => ({ conflicts: [] }));
         
         if (conflicts.conflicts && conflicts.conflicts.length > 0) {
             modalContent += `
@@ -2278,20 +2260,15 @@ async function applySchedule(date) {
     
     try {
         // Call the apply endpoint with the route data
-        const response = await fetch(`${API_BASE}/scheduling/apply`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                schedule_date: date,
-                route_data: scheduleData.routes
-            })
+        const result = await api.post('/scheduling/apply', {
+            schedule_date: date,
+            route_data: scheduleData.routes
+        }, {
+            successMessage: `成功套用排程！已建立 ${scheduleData.routes.length} 條路線`,
+            errorMessage: error => error.detail || '套用排程失敗'
         });
         
-        const result = await response.json();
-        
-        if (response.ok && result.success) {
-            showNotification(`成功套用排程！已建立 ${scheduleData.routes.length} 條路線`, 'success');
-            
+        if (result && result.success) {
             // Refresh the routes section if it's visible
             const routesSection = document.getElementById('routes');
             if (routesSection && !routesSection.classList.contains('hidden')) {
@@ -2300,8 +2277,6 @@ async function applySchedule(date) {
             
             // Close the scheduling modal
             closeModal('schedulingModal');
-        } else {
-            showNotification(result.detail || '套用排程失敗', 'error');
         }
     } catch (error) {
         console.error('Apply schedule error:', error);
