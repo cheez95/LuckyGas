@@ -94,6 +94,91 @@
         renderGenericTable('schedules', schedules);
     }
     
+    /**
+     * Update pagination controls for a given section
+     * @param {string} section - Section name (e.g., 'deliveries', 'clients')
+     * @param {number} currentPage - Current page number
+     * @param {number} totalPages - Total number of pages
+     * @param {number} totalItems - Total number of items
+     */
+    function updatePagination(section, currentPage, totalPages, totalItems) {
+        const container = document.getElementById(`${section}-pagination`);
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        // Showing info
+        const showingElement = document.getElementById(`${section}-showing`);
+        const totalElement = document.getElementById(`${section}-total`);
+        if (showingElement && totalElement) {
+            const startItem = (currentPage - 1) * 10 + 1;
+            const endItem = Math.min(currentPage * 10, totalItems);
+            showingElement.textContent = totalItems > 0 ? `${startItem}-${endItem}` : '0';
+            totalElement.textContent = totalItems;
+        }
+        
+        if (totalPages <= 1) return;
+        
+        // Helper function to capitalize first letter
+        const capitalize = (str) => str.charAt(0).toUpperCase() + str.slice(1);
+        
+        // First and Previous buttons
+        if (currentPage > 1) {
+            container.innerHTML += `
+                <button data-action="load${capitalize(section)}" data-page="1" 
+                        class="px-3 py-1 border rounded hover:bg-gray-100 ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}"
+                        ${currentPage === 1 ? 'disabled' : ''}>
+                    <i class="fas fa-angle-double-left"></i>
+                </button>
+                <button data-action="load${capitalize(section)}" data-page="${currentPage - 1}" 
+                        class="px-3 py-1 border rounded hover:bg-gray-100">
+                    <i class="fas fa-angle-left"></i>
+                </button>
+            `;
+        }
+        
+        // Page numbers with ellipsis
+        const pageNumbers = [];
+        const delta = 2;
+        
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) {
+                pageNumbers.push(i);
+            }
+        }
+        
+        let lastPage = 0;
+        pageNumbers.forEach(page => {
+            if (lastPage && page - lastPage > 1) {
+                container.innerHTML += `<span class="px-2">...</span>`;
+            }
+            
+            container.innerHTML += `
+                <button data-action="load${capitalize(section)}" data-page="${page}" 
+                        class="px-3 py-1 border rounded ${page === currentPage ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'}">
+                    ${page}
+                </button>
+            `;
+            
+            lastPage = page;
+        });
+        
+        // Next and Last buttons
+        if (currentPage < totalPages) {
+            container.innerHTML += `
+                <button data-action="load${capitalize(section)}" data-page="${currentPage + 1}" 
+                        class="px-3 py-1 border rounded hover:bg-gray-100">
+                    <i class="fas fa-angle-right"></i>
+                </button>
+                <button data-action="load${capitalize(section)}" data-page="${totalPages}" 
+                        class="px-3 py-1 border rounded hover:bg-gray-100 ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}"
+                        ${currentPage === totalPages ? 'disabled' : ''}>
+                    <i class="fas fa-angle-double-right"></i>
+                </button>
+            `;
+        }
+    }
+    
     // Export all table renderers
     window.tableRenderers = {
         renderDeliveriesTable,
@@ -105,7 +190,9 @@
         renderRoutesTable,
         renderScheduleTable,
         // Also export the generic renderer for flexibility
-        renderGenericTable
+        renderGenericTable,
+        // Export updatePagination function
+        updatePagination
     };
     
     // Also export individually for backward compatibility
@@ -118,6 +205,7 @@
     window.renderRoutesTable = renderRoutesTable;
     window.renderScheduleTable = renderScheduleTable;
     window.renderGenericTable = renderGenericTable;
+    window.updatePagination = updatePagination;
     
     console.log('✅ Table Renderers module loaded');
 })();
