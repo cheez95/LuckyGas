@@ -7,45 +7,53 @@
 (function() {
     'use strict';
     
-    // Report generation functions will be moved from app.js
+    // Export clients to CSV
+    async function exportClients() {
+        const params = new URLSearchParams(clientFilters);
+        params.append('export', 'csv');
+        
+        const blob = await api.get(`/clients?${params}`, {
+            successMessage: '匯出成功',
+            errorMessage: '匯出失敗'
+        }).catch(() => null);
+        
+        if (blob && blob instanceof Blob) {
+            html.downloadBlob(blob, `clients_${new Date().toISOString().split('T')[0]}.csv`);
+        }
+    }
+    
+    // Placeholder functions for future report generation
     async function generateDeliveryReport() {
-        // Will be moved from app.js
+        console.log('Generate delivery report - to be implemented');
     }
     
     async function generateRouteReport() {
-        // Will be moved from app.js
+        console.log('Generate route report - to be implemented');
     }
     
     async function generateDriverReport() {
-        // Will be moved from app.js
+        console.log('Generate driver report - to be implemented');
     }
     
     async function generateClientReport() {
-        // Will be moved from app.js
-    }
-    
-    function exportToExcel(data, filename) {
-        // Will be moved from app.js
-    }
-    
-    function exportToPDF(data, filename) {
-        // Will be moved from app.js
-    }
-    
-    function downloadReport(content, filename, type) {
-        // Will be moved from app.js
+        console.log('Generate client report - to be implemented');
     }
     
     // Export report handlers
     window.reportHandlers = {
+        exportClients,
         generateDeliveryReport,
         generateRouteReport,
         generateDriverReport,
-        generateClientReport,
-        exportToExcel,
-        exportToPDF,
-        downloadReport
+        generateClientReport
     };
+    
+    // Also export individually for backward compatibility
+    window.exportClients = exportClients;
+    window.generateDeliveryReport = generateDeliveryReport;
+    window.generateRouteReport = generateRouteReport;
+    window.generateDriverReport = generateDriverReport;
+    window.generateClientReport = generateClientReport;
     
     console.log('✅ Report Handlers module loaded');
 })();
