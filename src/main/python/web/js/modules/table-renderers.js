@@ -1,48 +1,97 @@
 /**
  * Table Renderers Module
  * Contains all table rendering functions for different entities
- * Functions: renderDeliveriesTable, renderClientsTable, renderDriversTable, etc.
+ * Uses table configurations from window.tableConfigs
  */
 
 (function() {
     'use strict';
     
+    // Generic table renderer that uses configuration
+    function renderGenericTable(configType, data) {
+        // Get configuration for this table type
+        const config = window.tableConfigs && window.tableConfigs[configType];
+        if (!config) {
+            console.error(`Table configuration not found for type: ${configType}`);
+            return;
+        }
+        
+        // Get the table container
+        const container = document.getElementById(config.containerId);
+        if (!container) {
+            console.error(`Container not found: ${config.containerId}`);
+            return;
+        }
+        
+        // Check if data is empty
+        if (!data || data.length === 0) {
+            container.innerHTML = `<p class="no-data">${config.emptyMessage || 'No data available'}</p>`;
+            return;
+        }
+        
+        // Prepare rows with data and attributes
+        const rows = data.map(item => {
+            const row = {
+                data: item,
+                attributes: {}
+            };
+            
+            // Add row attributes if specified in config
+            if (config.getRowAttributes && typeof config.getRowAttributes === 'function') {
+                Object.assign(row.attributes, config.getRowAttributes(item));
+            }
+            
+            return row;
+        });
+        
+        // Render the table using the utilities function
+        if (window.utilities && window.utilities.table) {
+            window.utilities.table.render(
+                container,
+                config.columns,
+                rows
+            );
+        } else {
+            console.error('Table utilities not found');
+        }
+    }
+    
     // Delivery table renderers
     function renderDeliveriesTable(deliveries) {
-        // Will be moved from app.js
+        renderGenericTable('deliveries', deliveries);
     }
     
     function renderPendingDeliveriesTable(deliveries) {
-        // Will be moved from app.js
+        renderGenericTable('pendingDeliveries', deliveries);
     }
     
     // Client table renderers
     function renderClientsTable(clients) {
-        // Will be moved from app.js
+        renderGenericTable('clients', clients);
     }
     
     function renderClientDetailsTable(deliveries) {
-        // Will be moved from app.js
+        renderGenericTable('clientDetails', deliveries);
     }
     
     // Driver table renderer
     function renderDriversTable(drivers) {
-        // Will be moved from app.js
+        renderGenericTable('drivers', drivers);
     }
     
     // Vehicle table renderer
     function renderVehiclesTable(vehicles) {
-        // Will be moved from app.js
+        renderGenericTable('vehicles', vehicles);
     }
     
     // Route table renderer
     function renderRoutesTable(routes) {
-        // Will be moved from app.js
+        renderGenericTable('routes', routes);
     }
     
     // Schedule table renderer
     function renderScheduleTable(schedules) {
-        // Will be moved from app.js
+        renderGenericTable('schedules', schedules);
     }
     
     // Export all table renderers
@@ -54,7 +103,9 @@
         renderDriversTable,
         renderVehiclesTable,
         renderRoutesTable,
-        renderScheduleTable
+        renderScheduleTable,
+        // Also export the generic renderer for flexibility
+        renderGenericTable
     };
     
     console.log('✅ Table Renderers module loaded');
