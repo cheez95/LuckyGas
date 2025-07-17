@@ -2125,54 +2125,9 @@ function createEditModal(title, content) {
     return modal;
 }
 
-function closeModal(modal) {
-    if (modal) {
-        modal.remove();
-    }
-}
+// Simple closeModal removed - using enhanced version at line 4333
 
-// Modal display functions
-function showAddClientModal() {
-    const modal = document.getElementById('addClientModal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        const form = modal.querySelector('form');
-        if (form) {
-            form.reset();
-        }
-    } else {
-        console.error('Add client modal not found in DOM');
-    }
-}
-
-function showAddDriverModal() {
-    const modal = document.getElementById('addDriverModal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        const form = modal.querySelector('form');
-        if (form) {
-            form.reset();
-        }
-    } else {
-        console.error('Add driver modal not found');
-    }
-}
-
-function showAddVehicleModal() {
-    const modal = document.getElementById('addVehicleModal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        const form = modal.querySelector('form');
-        if (form) {
-            form.reset();
-        }
-    } else {
-        console.error('Add vehicle modal not found');
-    }
-}
+// Modal display functions removed - replaced by newer implementation
 
 async function showAddDeliveryModal() {
     const modal = document.getElementById('addDeliveryModal');
@@ -2221,57 +2176,9 @@ async function showAddDeliveryModal() {
     }
 }
 
-// Helper function to setup add client form handler
-function setupAddClientFormHandler() {
-    const form = document.getElementById('add-client-form');
-    if (form && !form.dataset.handlerAttached) {
-        form.dataset.handlerAttached = 'true';
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const data = Object.fromEntries(formData);
-            
-            try {
-                const response = await secureFetch('/api/clients', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-                
-                if (response.ok) {
-                    showNotification('客戶新增成功', 'success');
-                    closeModal(document.getElementById('addClientModal'));
-                    loadClients(1);
-                } else {
-                    const error = await response.json();
-                    showNotification(error.detail || '新增失敗', 'error');
-                }
-            } catch (error) {
-                showNotification('新增失敗: ' + error.message, 'error');
-            }
-        });
-    }
-}
+// setupAddClientFormHandler removed - replaced by setupFormHandlers
 
-// Sorting functions
-function sortClients(column) {
-    if (clientFilters.sortBy === column) {
-        clientFilters.sortOrder = clientFilters.sortOrder === 'asc' ? 'desc' : 'asc';
-    } else {
-        clientFilters.sortBy = column;
-        clientFilters.sortOrder = 'asc';
-    }
-    loadClients(1);
-}
-
-function sortDeliveries(value) {
-    if (value) {
-        const [column, order] = value.split('-');
-        deliveryFilters.sortBy = column;
-        deliveryFilters.sortOrder = order;
-        loadDeliveries(1);
-    }
-}
+// Sorting functions removed - never used in the application
 
 // Additional utility functions
 async function updateDeliveryStatus(deliveryId, currentStatus) {
@@ -2625,7 +2532,7 @@ function setupFormHandlers() {
                 }},
                 phone: { required: true, type: 'phone' },
                 id_number: { required: true, type: 'custom', validator: (value) => {
-                    // Taiwan ID number validation
+                    // Taiwan ID number validation with checksum
                     if (!value || value.trim() === '') {
                         return { isValid: false, message: '身分證字號不能為空' };
                     }
@@ -2633,7 +2540,33 @@ function setupFormHandlers() {
                     if (!idPattern.test(value)) {
                         return { isValid: false, message: '請輸入有效的台灣身分證字號' };
                     }
-                    // TODO: Add checksum validation for Taiwan ID
+                    
+                    // Checksum validation for Taiwan ID
+                    const letterValues = {
+                        A: 10, B: 11, C: 12, D: 13, E: 14, F: 15, G: 16, H: 17, I: 34,
+                        J: 18, K: 19, L: 20, M: 21, N: 22, O: 35, P: 23, Q: 24, R: 25,
+                        S: 26, T: 27, U: 28, V: 29, W: 32, X: 30, Y: 31, Z: 33
+                    };
+                    
+                    const firstLetter = value.charAt(0);
+                    const letterValue = letterValues[firstLetter];
+                    const n1 = Math.floor(letterValue / 10);
+                    const n2 = letterValue % 10;
+                    
+                    let sum = n1 + n2 * 9;
+                    
+                    // Add weighted sum of digits
+                    for (let i = 1; i < 9; i++) {
+                        sum += parseInt(value.charAt(i)) * (9 - i);
+                    }
+                    
+                    // Add check digit
+                    sum += parseInt(value.charAt(9));
+                    
+                    if (sum % 10 !== 0) {
+                        return { isValid: false, message: '身分證字號檢查碼錯誤' };
+                    }
+                    
                     return { isValid: true, message: '' };
                 }},
                 address: { required: true, type: 'address' },
@@ -3411,9 +3344,7 @@ function viewDelivery(deliveryId) {
     return viewDeliveryDetails(deliveryId);
 }
 
-function assignDelivery(deliveryId) {
-    return assignDriver(deliveryId);
-}
+// Duplicate assignDelivery wrapper removed - use assignDriver directly
 
 // ========== Route Management Functions ==========
 
