@@ -63,7 +63,14 @@ window.SecurityUtils = SecurityUtils;
 console.log('SecurityUtils exported to window:', window.SecurityUtils);
 
 // API Base URL - Use from config if available, otherwise default to localhost
-const API_BASE = window.APP_CONFIG?.API?.BASE_URL || 'http://localhost:8000/api';
+// Use let to allow reassignment and avoid const redeclaration errors
+let API_BASE;
+if (typeof window.API_BASE !== 'undefined') {
+    API_BASE = window.API_BASE;
+} else {
+    API_BASE = window.APP_CONFIG?.API?.BASE_URL || 'http://localhost:8000/api';
+    window.API_BASE = API_BASE;
+}
 
 /**
  * CSRF Protection Module

@@ -7,8 +7,8 @@
 (function() {
     'use strict';
     
-    // API Base URL
-    const API_BASE = window.APP_CONFIG?.API?.BASE_URL || 'http://localhost:8000/api';
+    // API Base URL - Use window.API_BASE if already defined
+    const API_BASE = window.API_BASE || window.APP_CONFIG?.API?.BASE_URL || 'http://localhost:8000/api';
     
     // API UTILITY - Consolidates 70+ fetch patterns
     const api = {
