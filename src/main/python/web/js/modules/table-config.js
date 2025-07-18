@@ -189,14 +189,18 @@
             emptyMessage: '沒有找到客戶資料',
             columns: [
                 {
-                    field: 'code',
+                    field: 'client_code',
                     class: 'px-6 py-4 text-sm font-medium',
                     format: (value) => window.html.escape(value)
                 },
                 {
                     field: 'name',
                     class: 'px-6 py-4 text-sm',
-                    format: (value) => window.html.escape(value)
+                    render: (item) => {
+                        // Use name if available, otherwise use invoice_title or short_name
+                        const displayName = item.name || item.invoice_title || item.short_name || '-';
+                        return window.html.escape(displayName);
+                    }
                 },
                 {
                     field: 'contact_person',
@@ -230,7 +234,7 @@
                             title: '編輯',
                             class: 'text-blue-600 hover:text-blue-900',
                             dataAction: 'editClient',
-                            dataAttrs: `data-code="${item.code}"`
+                            dataAttrs: `data-code="${item.client_code}"`
                         }
                     ])
                 }

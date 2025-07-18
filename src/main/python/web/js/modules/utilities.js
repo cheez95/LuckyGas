@@ -100,8 +100,13 @@
     // TABLE UTILITY - Consolidates table rendering
     const table = {
         render(tbodyId, data, columns, emptyMessage = '沒有找到資料') {
+            console.log(`🏗️ table.render called for ${tbodyId} with ${data?.length || 0} items`);
+            
             const tbody = document.getElementById(tbodyId);
-            if (!tbody) return;
+            if (!tbody) {
+                console.error(`❌ tbody element not found: ${tbodyId}`);
+                return;
+            }
             
             // Clear existing content safely
             while (tbody.firstChild) {
@@ -110,6 +115,7 @@
             
             // Handle empty state
             if (!data || data.length === 0) {
+                console.log(`📭 No data to display for ${tbodyId}`);
                 const row = tbody.insertRow();
                 const cell = row.insertCell();
                 cell.colSpan = columns.length;
@@ -117,6 +123,9 @@
                 cell.textContent = emptyMessage;
                 return;
             }
+            
+            console.log(`🔨 Rendering ${data.length} rows for ${tbodyId}`);
+            console.log(`🔍 First item:`, data[0]);
             
             // Render rows
             data.forEach(item => {
