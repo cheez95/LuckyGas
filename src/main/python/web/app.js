@@ -2518,3 +2518,7 @@ window.deleteVehicle = deleteVehicle;
 // View functions for drivers and vehicles
 window.viewDriverDetails = viewDriverDetails;
 window.viewVehicleDetails = viewVehicleDetails;
+
+// Utility functions that modules need
+window.formatDate = formatDate;
+window.formatDateTime = formatDateTime;
