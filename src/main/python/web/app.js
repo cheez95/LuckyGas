@@ -232,8 +232,8 @@ let routeFilters = {
 // Initialize
 function initializeApp() {
     console.log('initializeApp called');
-    // Initialize event delegation
-    eventDelegation.init();
+    // Event delegation is now initialized in index.html after modules load
+    // eventDelegation.init(); // Removed - old reference
     
     // Set current date in header
     const dateElement = document.getElementById('currentDate');
