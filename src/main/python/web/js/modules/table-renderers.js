@@ -16,40 +16,21 @@
             return;
         }
         
-        // Get the table container
-        const container = document.getElementById(config.containerId);
-        if (!container) {
-            console.error(`Container not found: ${config.containerId}`);
+        // The configuration uses 'tbodyId' not 'containerId'
+        const tbodyId = config.tbodyId;
+        if (!tbodyId) {
+            console.error(`tbodyId not found in configuration for type: ${configType}`);
             return;
         }
         
-        // Check if data is empty
-        if (!data || data.length === 0) {
-            container.innerHTML = `<p class="no-data">${config.emptyMessage || 'No data available'}</p>`;
-            return;
-        }
-        
-        // Prepare rows with data and attributes
-        const rows = data.map(item => {
-            const row = {
-                data: item,
-                attributes: {}
-            };
-            
-            // Add row attributes if specified in config
-            if (config.getRowAttributes && typeof config.getRowAttributes === 'function') {
-                Object.assign(row.attributes, config.getRowAttributes(item));
-            }
-            
-            return row;
-        });
-        
-        // Render the table using the utilities function
-        if (window.utilities && window.utilities.table) {
-            window.utilities.table.render(
-                container,
+        // Use the table utility's render function with the correct parameters
+        // The window.table.render expects: (tbodyId, data, columns, emptyMessage)
+        if (window.table && window.table.render) {
+            window.table.render(
+                tbodyId,
+                data,
                 config.columns,
-                rows
+                config.emptyMessage || 'No data available'
             );
         } else {
             console.error('Table utilities not found');

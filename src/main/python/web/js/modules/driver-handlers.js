@@ -15,6 +15,39 @@
         updateDriverOptions();
     }
     
+    // Show add driver modal
+    function showAddDriverModal() {
+        const modal = document.getElementById('addDriverModal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            // Reset form
+            const form = document.getElementById('add-driver-form');
+            if (form) form.reset();
+            
+            console.log('✅ Add driver modal opened');
+        } else {
+            console.error('❌ Add driver modal not found');
+        }
+    }
+    
+    // Add driver
+    async function addDriver(driverData) {
+        const result = await api.post('/drivers', driverData, {
+            successMessage: '司機已新增'
+        });
+        
+        if (result !== null) {
+            // Close modal
+            closeModal('addDriverModal');
+            // Reload drivers
+            await loadDrivers();
+        }
+        
+        return result;
+    }
+    
     async function editDriver(driverId) {
         const driver = await api.get(`/drivers/${driverId}`, {
             errorMessage: '載入司機資料失敗'
@@ -128,6 +161,35 @@
         await loadDrivers();
     }
     
+    // Initialize event listeners
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add driver form submission
+        const addDriverForm = document.getElementById('add-driver-form');
+        if (addDriverForm) {
+            addDriverForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const formData = new FormData(addDriverForm);
+                const driverData = {};
+                
+                // Convert form data to object
+                for (let [key, value] of formData.entries()) {
+                    // Convert numeric fields
+                    if (key === 'base_salary' || key === 'commission_rate') {
+                        driverData[key] = parseFloat(value) || 0;
+                    } else {
+                        driverData[key] = value;
+                    }
+                }
+                
+                // Add driver
+                await addDriver(driverData);
+            });
+            
+            console.log('✅ Add driver form listener attached');
+        }
+    });
+    
     // Export driver handlers
     window.driverHandlers = {
         loadDrivers,
@@ -135,7 +197,9 @@
         deleteDriver,
         updateDriverOptions,
         loadDriversForFilter,
-        loadDriversAndVehiclesForRoute
+        loadDriversAndVehiclesForRoute,
+        showAddDriverModal,
+        addDriver
     };
     
     // Also export individually for backward compatibility
@@ -145,6 +209,8 @@
     window.updateDriverOptions = updateDriverOptions;
     window.loadDriversForFilter = loadDriversForFilter;
     window.loadDriversAndVehiclesForRoute = loadDriversAndVehiclesForRoute;
+    window.showAddDriverModal = showAddDriverModal;
+    window.addDriver = addDriver;
     
     console.log('✅ Driver Handlers module loaded');
 })();

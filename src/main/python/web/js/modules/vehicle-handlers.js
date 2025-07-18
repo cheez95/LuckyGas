@@ -70,15 +70,34 @@
     }
     
     function showAddVehicleModal() {
-        // Will be moved from app.js
+        const modal = document.getElementById('addVehicleModal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            // Reset form
+            const form = document.getElementById('add-vehicle-form');
+            if (form) form.reset();
+            
+            console.log('✅ Add vehicle modal opened');
+        } else {
+            console.error('❌ Add vehicle modal not found');
+        }
     }
     
-    async function addVehicle() {
-        // Will be moved from app.js
-    }
-    
-    async function updateVehicle(vehicleId) {
-        // Will be moved from app.js
+    async function addVehicle(vehicleData) {
+        const result = await api.post('/vehicles', vehicleData, {
+            successMessage: '車輛已新增'
+        });
+        
+        if (result !== null) {
+            // Close modal
+            closeModal('addVehicleModal');
+            // Reload vehicles
+            await loadVehicles();
+        }
+        
+        return result;
     }
     
     // Toggle vehicle status
@@ -97,12 +116,43 @@
         await loadVehicles();
     }
     
+    // Initialize event listeners
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add vehicle form submission
+        const addVehicleForm = document.getElementById('add-vehicle-form');
+        if (addVehicleForm) {
+            addVehicleForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const formData = new FormData(addVehicleForm);
+                const vehicleData = {};
+                
+                // Convert form data to object
+                for (let [key, value] of formData.entries()) {
+                    // Convert numeric fields
+                    if (key === 'fuel_capacity' || key === 'mileage') {
+                        vehicleData[key] = parseFloat(value) || 0;
+                    } else {
+                        vehicleData[key] = value;
+                    }
+                }
+                
+                // Add vehicle
+                await addVehicle(vehicleData);
+            });
+            
+            console.log('✅ Add vehicle form listener attached');
+        }
+    });
+    
     // Export vehicle handlers
     window.vehicleHandlers = {
         loadVehicles,
         editVehicle,
         toggleVehicleStatus,
-        deleteVehicle
+        deleteVehicle,
+        showAddVehicleModal,
+        addVehicle
     };
     
     // Also export individually for backward compatibility
@@ -110,6 +160,8 @@
     window.editVehicle = editVehicle;
     window.toggleVehicleStatus = toggleVehicleStatus;
     window.deleteVehicle = deleteVehicle;
+    window.showAddVehicleModal = showAddVehicleModal;
+    window.addVehicle = addVehicle;
     
     console.log('✅ Vehicle Handlers module loaded');
 })();
