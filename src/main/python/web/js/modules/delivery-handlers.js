@@ -31,6 +31,7 @@
         sortOrder: 'asc'
     };
     let isLoadingDeliveries = false;
+    let loadingTimeoutId = null; // Track loading timeout globally
     
     // Delivery tab switching
     function switchDeliveryTab(tab) {
@@ -92,10 +93,50 @@
     async function loadDeliveries(page = 1) {
         // Prevent recursive calls
         if (isLoadingDeliveries) {
+            console.warn('⚠️ loadDeliveries called while already loading, skipping...');
             return;
         }
         
+        // Clear any existing timeout
+        if (loadingTimeoutId) {
+            clearTimeout(loadingTimeoutId);
+            loadingTimeoutId = null;
+        }
+        
         isLoadingDeliveries = true;
+        console.log('🔄 Loading deliveries started...');
+        
+        // Set a safety timeout to reset the flag after 30 seconds
+        loadingTimeoutId = setTimeout(() => {
+            console.error('❌ Loading timeout reached - forcing reset of isLoadingDeliveries flag');
+            isLoadingDeliveries = false;
+            loadingTimeoutId = null;
+            
+            // Show timeout error in UI
+            const tbody = document.getElementById('deliveries-tbody');
+            if (tbody) {
+                while (tbody.firstChild) {
+                    tbody.removeChild(tbody.firstChild);
+                }
+                
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 8;
+                cell.className = 'px-6 py-4 text-center text-orange-500';
+                cell.innerHTML = `
+                    <div>
+                        <p>載入逾時，請重新整理頁面</p>
+                        <button onclick="window.forceReloadDeliveries()" class="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                            強制重新載入
+                        </button>
+                    </div>
+                `;
+                row.appendChild(cell);
+                tbody.appendChild(row);
+            }
+            
+            showNotification('載入逾時，請重新嘗試', 'warning');
+        }, 30000); // 30 second timeout
         
         try {
             // Build query parameters
@@ -146,9 +187,12 @@
             // Update summary statistics
             updateDeliverySummary(data.items);
             
+            console.log('✅ Deliveries loaded successfully');
+            
         } catch (error) {
-            console.error('Error loading deliveries:', error);
+            console.error('❌ Error loading deliveries:', error);
             console.error('Current tab:', currentDeliveryTab);
+            console.error('Loading flag will be reset');
             
             // Error notification already handled by api utility
             // Just show empty state in table
@@ -163,13 +207,25 @@
                 const cell = document.createElement('td');
                 cell.colSpan = 8;
                 cell.className = 'px-6 py-4 text-center text-red-500';
-                cell.textContent = error.message || '載入配送單失敗';
+                cell.innerHTML = `
+                    <div>
+                        <p>${error.message || '載入配送單失敗'}</p>
+                        <button onclick="window.forceReloadDeliveries()" class="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                            重新載入
+                        </button>
+                    </div>
+                `;
                 row.appendChild(cell);
                 tbody.appendChild(row);
             }
         } finally {
-            // Always reset loading flag
+            // Always reset loading flag and clear timeout
             isLoadingDeliveries = false;
+            if (loadingTimeoutId) {
+                clearTimeout(loadingTimeoutId);
+                loadingTimeoutId = null;
+            }
+            console.log('🔓 isLoadingDeliveries flag reset');
         }
     }
     
@@ -719,6 +775,50 @@
         console.warn('deleteDelivery function not implemented in original app.js');
     }
     
+    // Force reload deliveries function that bypasses the loading flag
+    async function forceReloadDeliveries() {
+        console.log('🔄 Force reloading deliveries...');
+        
+        // Clear any existing timeout
+        if (loadingTimeoutId) {
+            clearTimeout(loadingTimeoutId);
+            loadingTimeoutId = null;
+        }
+        
+        // Force reset the loading flag
+        isLoadingDeliveries = false;
+        
+        // Clear any existing error messages
+        const tbody = document.getElementById('deliveries-tbody');
+        if (tbody) {
+            while (tbody.firstChild) {
+                tbody.removeChild(tbody.firstChild);
+            }
+            
+            // Show loading state
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = 8;
+            cell.className = 'px-6 py-4 text-center text-gray-500';
+            cell.innerHTML = '<span class="inline-block animate-spin mr-2">⟳</span> 載入中...';
+            row.appendChild(cell);
+            tbody.appendChild(row);
+        }
+        
+        // Reload deliveries
+        await loadDeliveries(currentDeliveryPage);
+    }
+    
+    // Debug function to check loading state
+    function getLoadingState() {
+        return {
+            isLoadingDeliveries,
+            hasTimeout: !!loadingTimeoutId,
+            currentTab: currentDeliveryTab,
+            currentPage: currentDeliveryPage
+        };
+    }
+    
     // Export delivery handlers
     window.deliveryHandlers = {
         loadDeliveries,
@@ -739,7 +839,9 @@
         loadWeeklyDeliveryChartFromStats,
         viewDeliveryDetails,
         getStatusText,
-        getPaymentMethodText
+        getPaymentMethodText,
+        forceReloadDeliveries,
+        getLoadingState
     };
     
     // Also export individually for backward compatibility
@@ -762,6 +864,8 @@
     window.viewDeliveryDetails = viewDeliveryDetails;
     window.getStatusText = getStatusText;
     window.getPaymentMethodText = getPaymentMethodText;
+    window.forceReloadDeliveries = forceReloadDeliveries;
+    window.getLoadingState = getLoadingState;
     
     // Update global references
     window.currentDeliveryTab = currentDeliveryTab;
