@@ -441,6 +441,8 @@ function showSection(section) {
 
 // Dashboard with real data
 async function loadDashboard() {
+    console.log('[Dashboard] Starting to load dashboard data...');
+    
     // Initialize chart references
     if (!window.deliveryChart) window.deliveryChart = null;
     if (!window.statusChart) window.statusChart = null;
@@ -450,24 +452,39 @@ async function loadDashboard() {
         document.getElementById(id).textContent = '載入中...';
     });
     
-    const stats = await api.get('/dashboard/stats', {
-        errorMessage: '載入儀表板失敗',
-        skipNotification: false
-    }).catch(() => {
+    try {
+        console.log('[Dashboard] Calling API endpoint: /dashboard/stats');
+        const stats = await api.get('/dashboard/stats', {
+            errorMessage: '載入儀表板失敗',
+            skipNotification: false
+        });
+        
+        console.log('[Dashboard] API response received:', stats);
+        
+        if (!stats) {
+            console.error('[Dashboard] No stats data received');
+            return;
+        }
+        
+        // Update statistics cards with detailed logging
+        console.log('[Dashboard] Updating statistics cards...');
+        console.log('[Dashboard] - Total clients:', stats.overview?.total_clients);
+        console.log('[Dashboard] - Today deliveries:', stats.today_deliveries?.total);
+        console.log('[Dashboard] - Available drivers:', stats.overview?.available_drivers);
+        console.log('[Dashboard] - Available vehicles:', stats.overview?.available_vehicles);
+        
+        document.getElementById('total-clients').textContent = stats.overview?.total_clients || 0;
+        document.getElementById('today-deliveries').textContent = stats.today_deliveries?.total || 0;
+        document.getElementById('available-drivers').textContent = stats.overview?.available_drivers || 0;
+        document.getElementById('available-vehicles').textContent = stats.overview?.available_vehicles || 0;
+    } catch (error) {
+        console.error('[Dashboard] Error loading dashboard:', error);
         // Show error state on failure
         ['total-clients', 'today-deliveries', 'available-drivers', 'available-vehicles'].forEach(id => {
             document.getElementById(id).textContent = '-';
         });
-        return null;
-    });
-    
-    if (!stats) return;
-    
-    // Update statistics cards
-    document.getElementById('total-clients').textContent = stats.overview?.total_clients || 0;
-    document.getElementById('today-deliveries').textContent = stats.today_deliveries?.total || 0;
-    document.getElementById('available-drivers').textContent = stats.overview?.available_drivers || 0;
-    document.getElementById('available-vehicles').textContent = stats.overview?.available_vehicles || 0;
+        return;
+    }
     
     // Load charts with data from stats
     loadWeeklyDeliveryChartFromStats(stats.week_trend);
