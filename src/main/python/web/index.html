@@ -827,8 +827,76 @@
     <script src="/js/utils/chartUtils.js"></script>
     <!-- Module Loader - Must load before app.js -->
     <script src="/js/modules/module-loader.js"></script>
-    <script src="/static/app.js?v=3"></script>
+    <script src="/static/app.js?v=4"></script>
     <script>
+        // Initialize navigation when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            
+            // Set up navigation links
+            const navLinks = document.querySelectorAll('.nav-link');
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const href = this.getAttribute('href');
+                    if (href && href.startsWith('#')) {
+                        const section = href.substring(1);
+                        window.location.hash = section;
+                        
+                        // Hide all sections
+                        document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+                        
+                        // Show selected section
+                        const sectionElement = document.getElementById(section);
+                        if (sectionElement) {
+                            sectionElement.classList.remove('hidden');
+                            
+                            // Update active nav
+                            navLinks.forEach(navLink => {
+                                navLink.classList.remove('text-blue-200', 'font-bold');
+                                if (navLink.getAttribute('href') === `#${section}`) {
+                                    navLink.classList.add('text-blue-200', 'font-bold');
+                                }
+                            });
+                            
+                            // Load section data
+                            switch(section) {
+                                case 'dashboard':
+                                    if (typeof loadDashboard === 'function') loadDashboard();
+                                    break;
+                                case 'clients':
+                                    if (typeof window.loadClients === 'function') window.loadClients();
+                                    break;
+                                case 'drivers':
+                                    if (typeof window.loadDrivers === 'function') window.loadDrivers();
+                                    break;
+                                case 'vehicles':
+                                    if (typeof window.loadVehicles === 'function') window.loadVehicles();
+                                    break;
+                                case 'deliveries':
+                                    if (typeof window.loadDeliveries === 'function') window.loadDeliveries();
+                                    break;
+                                case 'routes':
+                                    if (typeof loadRoutes === 'function') loadRoutes();
+                                    break;
+                            }
+                        }
+                    }
+                });
+            });
+            
+            // Handle initial hash or default to dashboard
+            const initialHash = window.location.hash;
+            if (initialHash && initialHash.length > 1) {
+                const section = initialHash.substring(1);
+                const link = document.querySelector(`a[href="#${section}"]`);
+                if (link) link.click();
+            } else {
+                // No hash, default to dashboard
+                const dashboardLink = document.querySelector('a[href="#dashboard"]');
+                if (dashboardLink) dashboardLink.click();
+            }
+        });
+        
         // Additional enhanced functions
         function sortClients(field) {
             if (clientFilters.sortBy === field) {

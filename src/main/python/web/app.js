@@ -220,6 +220,7 @@ let routeFilters = {
 
 // Initialize
 function initializeApp() {
+    console.log('initializeApp called');
     // Initialize event delegation
     eventDelegation.init();
     
@@ -248,15 +249,28 @@ function initializeApp() {
 }
 
 // Wait for both DOM and modules to be ready
-document.addEventListener('DOMContentLoaded', () => {
+function checkAndInitialize() {
+    console.log('checkAndInitialize called');
+    console.log('window.LuckyGasModules:', window.LuckyGasModules);
     // Check if modules are already loaded
     if (window.LuckyGasModules && Object.keys(window.LuckyGasModules).length > 0) {
+        console.log('Modules already loaded, initializing app');
         initializeApp();
     } else {
+        console.log('Waiting for modules to load');
         // Wait for modules to load
         window.addEventListener('modulesLoaded', initializeApp);
     }
-});
+}
+
+// Check if DOM is already loaded
+if (document.readyState === 'loading') {
+    console.log('DOM still loading, adding event listener');
+    document.addEventListener('DOMContentLoaded', checkAndInitialize);
+} else {
+    console.log('DOM already loaded, checking and initializing');
+    checkAndInitialize();
+}
 
 // Setup date defaults
 function setupDateDefaults() {
@@ -287,20 +301,26 @@ function setupDateDefaults() {
 
 // Navigation
 function setupNavigation() {
+    console.log('Setting up navigation...');
     try {
         const navLinks = document.querySelectorAll('.nav-link');
+        console.log('Found navigation links:', navLinks.length);
         if (navLinks.length === 0) {
             console.warn('No navigation links found');
             return;
         }
         
         navLinks.forEach(link => {
+            console.log('Adding click handler to:', link.getAttribute('href'));
             link.addEventListener('click', (e) => {
                 e.preventDefault();
+                console.log('Navigation link clicked');
                 // Use currentTarget to always get the link element, not nested elements
                 const href = e.currentTarget.getAttribute('href');
+                console.log('Link href:', href);
                 if (href && href.startsWith('#')) {
                     const section = href.substring(1);
+                    console.log('Navigating to section:', section);
                     // Update the URL hash
                     window.location.hash = section;
                     showSection(section);
@@ -326,12 +346,14 @@ function setupNavigation() {
 }
 
 function showSection(section) {
+    console.log('showSection called with:', section);
     try {
         // Hide all sections
         document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
         
         // Show selected section
         const sectionElement = document.getElementById(section);
+        console.log('Section element found:', sectionElement);
         if (sectionElement) {
             sectionElement.classList.remove('hidden');
             currentPage = section;
@@ -351,13 +373,28 @@ function showSection(section) {
                     loadDashboard();
                     break;
                 case 'clients':
-                    loadClients();
+                    if (window.loadClients) {
+                        window.loadClients();
+                    } else {
+                        console.error('loadClients function not found');
+                        showNotification('無法載入客戶管理', 'error');
+                    }
                     break;
                 case 'drivers':
-                    loadDrivers();
+                    if (window.loadDrivers) {
+                        window.loadDrivers();
+                    } else {
+                        console.error('loadDrivers function not found');
+                        showNotification('無法載入司機管理', 'error');
+                    }
                     break;
                 case 'vehicles':
-                    loadVehicles();
+                    if (window.loadVehicles) {
+                        window.loadVehicles();
+                    } else {
+                        console.error('loadVehicles function not found');
+                        showNotification('無法載入車輛管理', 'error');
+                    }
                     break;
                 case 'deliveries':
                     // Restore tab state when first showing deliveries section
@@ -2439,6 +2476,9 @@ window.updateAlgorithmDescription = updateAlgorithmDescription;
 window.previewSchedule = previewSchedule;
 window.viewScheduleDetails = viewScheduleDetails;
 window.applySchedule = applySchedule;
+
+// Dashboard function
+window.loadDashboard = loadDashboard;
 
 // Delete functions
 // deleteClient window assignment removed - now handled in client-handlers.js module

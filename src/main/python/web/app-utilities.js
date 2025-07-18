@@ -10,6 +10,10 @@
 // API UTILITY - Consolidates 70+ fetch patterns
 // Saves ~500 lines of repetitive code
 // ============================================
+
+// API Base URL - Use from config if available, otherwise default to localhost
+const API_BASE = window.APP_CONFIG?.API?.BASE_URL || 'http://localhost:8000/api';
+
 const api = {
     /**
      * Generic request handler with error management
