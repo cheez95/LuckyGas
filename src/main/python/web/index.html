@@ -830,6 +830,8 @@
     <!-- App Utilities - Must load before app.js -->
     <script src="/static/app-utilities.js"></script>
     <script src="/static/app.js?v=4"></script>
+    <!-- Debug modal functions -->
+    <script src="/js/debug-modals.js"></script>
     <script>
         // Initialize navigation when DOM is ready
         document.addEventListener('DOMContentLoaded', function() {
@@ -898,6 +900,36 @@
                 if (dashboardLink) dashboardLink.click();
             }
         });
+        
+        // Dashboard functions
+        async function loadDashboard() {
+            try {
+                const response = await fetch(`${API_BASE}/dashboard/stats`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const stats = await response.json();
+                
+                // Update dashboard stats
+                document.getElementById('total-clients').textContent = stats.total_clients || 0;
+                document.getElementById('today-deliveries').textContent = stats.today_deliveries || 0;
+                document.getElementById('available-drivers').textContent = stats.available_drivers || 0;
+                document.getElementById('available-vehicles').textContent = stats.available_vehicles || 0;
+                
+            } catch (error) {
+                console.error('Error loading dashboard stats:', error);
+                // Show error state
+                document.getElementById('total-clients').textContent = 'Error';
+                document.getElementById('today-deliveries').textContent = 'Error';
+                document.getElementById('available-drivers').textContent = 'Error';
+                document.getElementById('available-vehicles').textContent = 'Error';
+            }
+        }
+        
+        // Refresh dashboard stats
+        function refreshStats() {
+            loadDashboard();
+        }
         
         // Additional enhanced functions
         function sortClients(field) {

@@ -203,10 +203,11 @@
                     tbody.removeChild(tbody.firstChild);
                 }
                 
-                const row = document.createElement('tr');
-                const cell = document.createElement('td');
-                cell.colSpan = 8;
-                cell.className = 'px-6 py-4 text-center text-red-500';
+                const row = window.SecurityUtils.createElement('tr', {}, []);
+                const cell = window.SecurityUtils.createElement('td', {
+                    colSpan: 8,
+                    className: 'px-6 py-4 text-center text-red-500'
+                }, []);
                 cell.innerHTML = `
                     <div>
                         <p>${error.message || '載入配送單失敗'}</p>
@@ -302,19 +303,19 @@
             const gridDiv = window.SecurityUtils.createElement('div', { className: 'grid grid-cols-2 md:grid-cols-5 gap-4 text-sm' }, []);
             
             // Add total count
-            const totalDiv = document.createElement('div');
+            const totalDiv = window.SecurityUtils.createElement('div', {}, []);
             totalDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['總筆數']));
             totalDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'font-bold text-lg' }, [String(summary.total)]));
             gridDiv.appendChild(totalDiv);
             
             // Add total amount
-            const amountDiv = document.createElement('div');
+            const amountDiv = window.SecurityUtils.createElement('div', {}, []);
             amountDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['總金額']));
             amountDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'font-bold text-lg' }, ['$' + summary.totalAmount.toLocaleString()]));
             gridDiv.appendChild(amountDiv);
             
             // Add total gas
-            const gasDiv = document.createElement('div');
+            const gasDiv = window.SecurityUtils.createElement('div', {}, []);
             gasDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['總瓦斯桶數']));
             gasDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'font-bold text-lg' }, [String(summary.totalGas)]));
             gridDiv.appendChild(gasDiv);
@@ -322,28 +323,28 @@
             // Add status columns based on current tab
             if (currentDeliveryTab === 'planned') {
                 // For planned tab: show pending, assigned, and in_progress
-                const pendingDiv = document.createElement('div');
+                const pendingDiv = window.SecurityUtils.createElement('div', {}, []);
                 pendingDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['待處理']));
                 pendingDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'font-bold text-yellow-600 text-lg' }, [String(summary.byStatus.pending)]));
                 gridDiv.appendChild(pendingDiv);
                 
-                const assignedDiv = document.createElement('div');
+                const assignedDiv = window.SecurityUtils.createElement('div', {}, []);
                 assignedDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['已指派']));
                 assignedDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'font-bold text-blue-600 text-lg' }, [String(summary.byStatus.assigned)]));
                 gridDiv.appendChild(assignedDiv);
                 
-                const inProgressDiv = document.createElement('div');
+                const inProgressDiv = window.SecurityUtils.createElement('div', {}, []);
                 inProgressDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['配送中']));
                 inProgressDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'font-bold text-purple-600 text-lg' }, [String(summary.byStatus.in_progress)]));
                 gridDiv.appendChild(inProgressDiv);
             } else {
                 // For history tab: show completed and cancelled
-                const completedDiv = document.createElement('div');
+                const completedDiv = window.SecurityUtils.createElement('div', {}, []);
                 completedDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['已完成']));
                 completedDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'font-bold text-green-600 text-lg' }, [String(summary.byStatus.completed)]));
                 gridDiv.appendChild(completedDiv);
                 
-                const cancelledDiv = document.createElement('div');
+                const cancelledDiv = window.SecurityUtils.createElement('div', {}, []);
                 cancelledDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'text-gray-600' }, ['已取消']));
                 cancelledDiv.appendChild(window.SecurityUtils.createElement('p', { className: 'font-bold text-red-600 text-lg' }, [String(summary.byStatus.cancelled)]));
                 gridDiv.appendChild(cancelledDiv);
@@ -409,7 +410,7 @@
                 if (clientSelect) {
                     clientSelect.innerHTML = '<option value="">請選擇客戶</option>';
                     window.allClients.forEach(client => {
-                        const option = document.createElement('option');
+                        const option = window.SecurityUtils.createElement('option', {}, []);
                         option.value = client.id;
                         option.textContent = `${client.client_code} - ${client.name || client.invoice_title}`;
                         clientSelect.appendChild(option);
@@ -796,10 +797,11 @@
             }
             
             // Show loading state
-            const row = document.createElement('tr');
-            const cell = document.createElement('td');
-            cell.colSpan = 8;
-            cell.className = 'px-6 py-4 text-center text-gray-500';
+            const row = window.SecurityUtils.createElement('tr', {}, []);
+            const cell = window.SecurityUtils.createElement('td', {
+                colSpan: 8,
+                className: 'px-6 py-4 text-center text-gray-500'
+            }, []);
             cell.innerHTML = '<span class="inline-block animate-spin mr-2">⟳</span> 載入中...';
             row.appendChild(cell);
             tbody.appendChild(row);
