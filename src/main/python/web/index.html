@@ -988,6 +988,12 @@
                 window.addEventListener('modulesLoaded', function() {
                     console.log('Modules loaded event received');
                     setupNavigation();
+                    
+                    // Set up event delegation for dynamic buttons
+                    if (window.eventDelegation && window.eventDelegation.init) {
+                        window.eventDelegation.init();
+                        console.log('Event delegation initialized');
+                    }
                 });
             }
         });

@@ -2512,3 +2512,7 @@ window.loadDashboard = loadDashboard;
 // deleteClient window assignment removed - now handled in client-handlers.js module
 window.deleteDriver = deleteDriver;
 window.deleteVehicle = deleteVehicle;
+
+// View functions for drivers and vehicles
+window.viewDriverDetails = viewDriverDetails;
+window.viewVehicleDetails = viewVehicleDetails;

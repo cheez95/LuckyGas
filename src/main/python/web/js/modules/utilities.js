@@ -483,6 +483,9 @@
                         break;
                         
                     // Client operations
+                    case 'viewClient':
+                        if (window.viewClient && data.code) window.viewClient(data.code);
+                        break;
                     case 'editClient':
                         if (window.editClient && data.code) window.editClient(data.code);
                         break;
@@ -532,8 +535,14 @@
                         break;
                         
                     // Driver/Vehicle operations
+                    case 'viewDriver':
+                        if (window.viewDriverDetails && data.driverId) window.viewDriverDetails(parseInt(data.driverId));
+                        break;
                     case 'editDriver':
                         if (window.editDriver && data.driverId) window.editDriver(parseInt(data.driverId));
+                        break;
+                    case 'viewVehicle':
+                        if (window.viewVehicleDetails && data.vehicleId) window.viewVehicleDetails(parseInt(data.vehicleId));
                         break;
                     case 'editVehicle':
                         if (window.editVehicle && data.vehicleId) window.editVehicle(parseInt(data.vehicleId));

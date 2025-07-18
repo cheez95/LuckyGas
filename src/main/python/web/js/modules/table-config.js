@@ -230,9 +230,16 @@
                     class: 'px-6 py-4 text-sm text-right',
                     render: (item) => window.table.actionButtons([
                         {
+                            icon: 'fas fa-eye',
+                            title: '查看詳情',
+                            class: 'text-blue-600 hover:text-blue-900 mr-2',
+                            dataAction: 'viewClient',
+                            dataAttrs: `data-code="${item.client_code}"`
+                        },
+                        {
                             icon: 'fas fa-edit',
                             title: '編輯',
-                            class: 'text-blue-600 hover:text-blue-900',
+                            class: 'text-yellow-600 hover:text-yellow-900',
                             dataAction: 'editClient',
                             dataAttrs: `data-code="${item.client_code}"`
                         }
@@ -333,9 +340,16 @@
                     class: 'px-6 py-4 text-sm text-right',
                     render: (item) => window.table.actionButtons([
                         {
+                            icon: 'fas fa-eye',
+                            title: '查看詳情',
+                            class: 'text-blue-600 hover:text-blue-900 mr-2',
+                            dataAction: 'viewDriver',
+                            dataAttrs: `data-driver-id="${item.id}"`
+                        },
+                        {
                             icon: 'fas fa-edit',
                             title: '編輯',
-                            class: 'text-blue-600 hover:text-blue-900',
+                            class: 'text-yellow-600 hover:text-yellow-900',
                             dataAction: 'editDriver',
                             dataAttrs: `data-driver-id="${item.id}"`
                         }
@@ -390,9 +404,16 @@
                     class: 'px-6 py-4 text-sm text-right',
                     render: (item) => window.table.actionButtons([
                         {
+                            icon: 'fas fa-eye',
+                            title: '查看詳情',
+                            class: 'text-blue-600 hover:text-blue-900 mr-2',
+                            dataAction: 'viewVehicle',
+                            dataAttrs: `data-vehicle-id="${item.id}"`
+                        },
+                        {
                             icon: 'fas fa-edit',
                             title: '編輯',
-                            class: 'text-blue-600 hover:text-blue-900',
+                            class: 'text-yellow-600 hover:text-yellow-900',
                             dataAction: 'editVehicle',
                             dataAttrs: `data-vehicle-id="${item.id}"`
                         }
