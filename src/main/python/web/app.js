@@ -58,6 +58,10 @@ const SecurityUtils = {
     }
 };
 
+// Export SecurityUtils to window for global access
+window.SecurityUtils = SecurityUtils;
+console.log('SecurityUtils exported to window:', window.SecurityUtils);
+
 // API Base URL - Use from config if available, otherwise default to localhost
 const API_BASE = window.APP_CONFIG?.API?.BASE_URL || 'http://localhost:8000/api';
 
@@ -189,7 +193,7 @@ let allRoutes = [];
 let selectedRouteClients = [];
 
 // Filters and sorting
-let clientFilters = {
+window.clientFilters = {
     keyword: '',
     district: '',
     isActive: '',
@@ -197,7 +201,7 @@ let clientFilters = {
     sortOrder: 'desc'
 };
 
-let deliveryFilters = {
+window.deliveryFilters = {
     dateFrom: '',
     dateTo: '',
     status: '',
@@ -290,12 +294,12 @@ function setupDateDefaults() {
     
     if (fromInput) {
         fromInput.value = fromDate;
-        deliveryFilters.dateFrom = fromDate;
+        window.deliveryFilters.dateFrom = fromDate;
     }
     
     if (toInput) {
         toInput.value = toDate;
-        deliveryFilters.dateTo = toDate;
+        window.deliveryFilters.dateTo = toDate;
     }
 }
 
@@ -646,38 +650,38 @@ function loadRecentActivitiesFromStats(recentActivities) {
 function setupFilterHandlers() {
     // Client filters
     document.getElementById('client-search')?.addEventListener('input', debounce((e) => {
-        clientFilters.keyword = e.target.value;
-        loadClients(1);
+        window.clientFilters.keyword = e.target.value;
+        window.loadClients(1);
     }, 500));
     
     document.getElementById('client-district')?.addEventListener('change', (e) => {
-        clientFilters.district = e.target.value;
-        loadClients(1);
+        window.clientFilters.district = e.target.value;
+        window.loadClients(1);
     });
     
     document.getElementById('client-status')?.addEventListener('change', (e) => {
-        clientFilters.isActive = e.target.value;
-        loadClients(1);
+        window.clientFilters.isActive = e.target.value;
+        window.loadClients(1);
     });
     
     // Delivery filters
     document.getElementById('delivery-date-from')?.addEventListener('change', (e) => {
-        deliveryFilters.dateFrom = e.target.value;
+        window.deliveryFilters.dateFrom = e.target.value;
         window.loadDeliveries(1);
     });
     
     document.getElementById('delivery-date-to')?.addEventListener('change', (e) => {
-        deliveryFilters.dateTo = e.target.value;
+        window.deliveryFilters.dateTo = e.target.value;
         window.loadDeliveries(1);
     });
     
     document.getElementById('delivery-status')?.addEventListener('change', (e) => {
-        deliveryFilters.status = e.target.value;
+        window.deliveryFilters.status = e.target.value;
         window.loadDeliveries(1);
     });
     
     document.getElementById('delivery-driver')?.addEventListener('change', (e) => {
-        deliveryFilters.driverId = e.target.value;
+        window.deliveryFilters.driverId = e.target.value;
         window.loadDeliveries(1);
     });
 }
@@ -917,7 +921,7 @@ function setupFormHandlers() {
         successMessage: '客戶新增成功',
         onSuccess: () => {
             document.getElementById('add-client-form').reset();
-            loadClients();
+            window.loadClients();
         }
     });
     
@@ -933,7 +937,7 @@ function setupFormHandlers() {
         onSuccess: () => {
             closeModal(document.getElementById('addDeliveryModal'));
             document.getElementById('add-delivery-form').reset();
-            loadDeliveries();
+            window.loadDeliveries();
         }
     });
     

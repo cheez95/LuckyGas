@@ -240,5 +240,15 @@
     window.showNotification = showNotification;
     window.ModalManager = ModalManager;
     
+    // Also export as a group for module compatibility
+    window.uiComponents = {
+        showModal,
+        createModal,
+        createEditModal,
+        closeModal,
+        showNotification,
+        ModalManager
+    };
+    
     console.log('✅ UI Components module loaded');
 })();

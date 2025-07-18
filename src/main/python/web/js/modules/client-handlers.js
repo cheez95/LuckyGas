@@ -10,7 +10,10 @@
     // Import dependencies from global scope
     const { api, html, SecurityUtils, ValidationUtils, SanitizationUtils } = window;
     const { renderClientsTable, renderClientDeliveries, updatePagination } = window.tableRenderers;
-    const { showModal, closeModal, createEditModal } = window.uiComponents;
+    // Use direct access instead of destructuring to avoid errors
+    const showModal = window.showModal;
+    const closeModal = window.closeModal;
+    const createEditModal = window.createEditModal;
     const { validationRules, showNotification, formatDate } = window;
     
     // Client management functions

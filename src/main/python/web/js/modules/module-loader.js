@@ -32,7 +32,8 @@
     function loadModule(moduleName) {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = `/js/modules/${moduleName}`;
+            // Add cache-busting parameter to force reload
+            script.src = `/js/modules/${moduleName}?v=${Date.now()}`;
             script.type = 'text/javascript';
             script.async = false;
             

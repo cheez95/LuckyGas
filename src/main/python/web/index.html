@@ -825,17 +825,96 @@
     <script src="/utils/validation.js"></script>
     <script src="/utils/sanitization.js"></script>
     <script src="/js/utils/chartUtils.js"></script>
+    <!-- Initialize global state before modules -->
+    <script>
+        // Initialize filters that modules depend on
+        window.clientFilters = {
+            keyword: '',
+            district: '',
+            isActive: '',
+            sortBy: 'created_at',
+            sortOrder: 'desc'
+        };
+        
+        window.deliveryFilters = {
+            dateFrom: '',
+            dateTo: '',
+            status: '',
+            driverId: '',
+            clientId: '',
+            sortBy: 'scheduled_date',
+            sortOrder: 'desc'
+        };
+        
+        // Initialize other global variables
+        window.currentClientPage = 1;
+        window.currentDeliveryPage = 1;
+        window.allClients = [];
+        window.allDeliveries = [];
+        window.allDrivers = [];
+        window.allVehicles = [];
+        
+        // Initialize SecurityUtils for modules that need it
+        window.SecurityUtils = {
+            escapeHtml: function(text) {
+                if (text === null || text === undefined) return '';
+                const div = document.createElement('div');
+                div.textContent = String(text);
+                return div.innerHTML;
+            },
+            
+            createTextNode: function(text) {
+                return document.createTextNode(String(text || ''));
+            },
+            
+            createElement: function(tag, attributes = {}, children = []) {
+                const element = document.createElement(tag);
+                
+                Object.entries(attributes).forEach(([key, value]) => {
+                    if (key === 'className') {
+                        element.className = value;
+                    } else if (key === 'id') {
+                        element.id = value;
+                    } else if (key.startsWith('data-')) {
+                        element.setAttribute(key, value);
+                    } else if (key === 'onclick' && typeof value === 'function') {
+                        element.addEventListener('click', value);
+                    } else if (key === 'title') {
+                        element.title = value;
+                    } else {
+                        element.setAttribute(key, String(value));
+                    }
+                });
+                
+                children.forEach(child => {
+                    if (typeof child === 'string') {
+                        element.appendChild(this.createTextNode(child));
+                    } else if (child instanceof Node) {
+                        element.appendChild(child);
+                    }
+                });
+                
+                return element;
+            }
+        };
+    </script>
+    
     <!-- Module Loader - Must load before app.js -->
-    <script src="/js/modules/module-loader.js"></script>
+    <script src="/js/modules/module-loader.js?v=2"></script>
     <!-- App Utilities - Must load before app.js -->
     <script src="/static/app-utilities.js"></script>
-    <script src="/static/app.js?v=4"></script>
+    <script src="/static/app.js?v=6"></script>
     <script>
         // Initialize navigation when DOM is ready
         document.addEventListener('DOMContentLoaded', function() {
             
-            // Set up navigation links
-            const navLinks = document.querySelectorAll('.nav-link');
+            // Wait for modules to be loaded before setting up navigation
+            function setupNavigation() {
+                console.log('Setting up navigation...');
+                console.log('window.loadClients available:', typeof window.loadClients);
+                
+                // Set up navigation links
+                const navLinks = document.querySelectorAll('.nav-link');
             navLinks.forEach(link => {
                 link.addEventListener('click', function(e) {
                     e.preventDefault();
@@ -886,16 +965,30 @@
                 });
             });
             
-            // Handle initial hash or default to dashboard
-            const initialHash = window.location.hash;
-            if (initialHash && initialHash.length > 1) {
-                const section = initialHash.substring(1);
-                const link = document.querySelector(`a[href="#${section}"]`);
-                if (link) link.click();
+                // Handle initial hash or default to dashboard
+                const initialHash = window.location.hash;
+                if (initialHash && initialHash.length > 1) {
+                    const section = initialHash.substring(1);
+                    const link = document.querySelector(`a[href="#${section}"]`);
+                    if (link) link.click();
+                } else {
+                    // No hash, default to dashboard
+                    const dashboardLink = document.querySelector('a[href="#dashboard"]');
+                    if (dashboardLink) dashboardLink.click();
+                }
+            }
+            
+            // Check if modules are already loaded
+            if (window.LuckyGasModules && window.LuckyGasModules['client-handlers.js']) {
+                console.log('Modules already loaded, setting up navigation immediately');
+                setupNavigation();
             } else {
-                // No hash, default to dashboard
-                const dashboardLink = document.querySelector('a[href="#dashboard"]');
-                if (dashboardLink) dashboardLink.click();
+                console.log('Waiting for modules to load...');
+                // Wait for modules to be loaded
+                window.addEventListener('modulesLoaded', function() {
+                    console.log('Modules loaded event received');
+                    setupNavigation();
+                });
             }
         });
         
@@ -932,20 +1025,20 @@
         
         // Additional enhanced functions
         function sortClients(field) {
-            if (clientFilters.sortBy === field) {
-                clientFilters.sortOrder = clientFilters.sortOrder === 'asc' ? 'desc' : 'asc';
+            if (window.clientFilters.sortBy === field) {
+                window.clientFilters.sortOrder = window.clientFilters.sortOrder === 'asc' ? 'desc' : 'asc';
             } else {
-                clientFilters.sortBy = field;
-                clientFilters.sortOrder = 'desc';
+                window.clientFilters.sortBy = field;
+                window.clientFilters.sortOrder = 'desc';
             }
-            loadClients(1);
+            window.loadClients(1);
         }
         
         function sortDeliveries(value) {
             const [field, order] = value.split('-');
-            deliveryFilters.sortBy = field;
-            deliveryFilters.sortOrder = order;
-            loadDeliveries(1);
+            window.deliveryFilters.sortBy = field;
+            window.deliveryFilters.sortOrder = order;
+            window.loadDeliveries(1);
         }
         
         // Enhanced driver and vehicle sections
