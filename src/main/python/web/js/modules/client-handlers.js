@@ -15,6 +15,8 @@
     
     // Client management functions
     async function loadClients(page = 1) {
+        console.log('📋 loadClients called with page:', page);
+        
         // Build query parameters
         const params = new URLSearchParams({
             page: page,
@@ -29,16 +31,27 @@
             params.append('order_desc', window.clientFilters.sortOrder === 'desc');
         }
         
-        const data = await api.get(`/clients?${params}`);
+        console.log('📡 Making API request to:', `/clients?${params}`);
         
-        window.allClients = data.items || [];
-        window.currentClientPage = page;
-        
-        // Render table
-        renderClientsTable(window.allClients);
-        
-        // Update pagination
-        updatePagination('clients', data.page, data.total_pages, data.total);
+        try {
+            const data = await api.get(`/clients?${params}`);
+            console.log('✅ API response received:', data);
+            
+            window.allClients = data.items || [];
+            window.currentClientPage = page;
+            
+            console.log('📊 Processing clients:', window.allClients.length, 'items');
+            console.log('📊 First client:', window.allClients[0]);
+            
+            // Render table
+            renderClientsTable(window.allClients);
+            
+            // Update pagination
+            updatePagination('clients', data.page, data.total_pages, data.total);
+        } catch (error) {
+            console.error('❌ Error loading clients:', error);
+            throw error;
+        }
     }
     
     async function viewClient(clientCode) {

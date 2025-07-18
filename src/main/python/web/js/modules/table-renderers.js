@@ -9,6 +9,8 @@
     
     // Generic table renderer that uses configuration
     function renderGenericTable(configType, data) {
+        console.log(`🎨 renderGenericTable called for ${configType} with ${data?.length || 0} items`);
+        
         // Get configuration for this table type
         const config = window.tableConfigs && window.tableConfigs[configType];
         if (!config) {
@@ -23,6 +25,8 @@
             return;
         }
         
+        console.log(`🎯 Rendering to tbody: ${tbodyId}`);
+        
         // Use the table utility's render function with the correct parameters
         // The window.table.render expects: (tbodyId, data, columns, emptyMessage)
         if (window.table && window.table.render) {
@@ -32,6 +36,7 @@
                 config.columns,
                 config.emptyMessage || 'No data available'
             );
+            console.log(`✅ Table render completed for ${configType}`);
         } else {
             console.error('Table utilities not found');
         }
