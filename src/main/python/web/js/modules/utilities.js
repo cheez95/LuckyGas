@@ -8,7 +8,14 @@
     'use strict';
     
     // API Base URL - Use window.API_BASE if already defined
-    const API_BASE = window.API_BASE || window.APP_CONFIG?.API?.BASE_URL || 'http://localhost:8000/api';
+    // Using let to avoid redeclaration errors when API_BASE is already defined globally
+    let API_BASE;
+    if (typeof window.API_BASE !== 'undefined') {
+        API_BASE = window.API_BASE;
+    } else {
+        API_BASE = window.APP_CONFIG?.API?.BASE_URL || 'http://localhost:8000/api';
+        // Don't set window.API_BASE here - let app.js or app-utilities.js handle that
+    }
     
     // API UTILITY - Consolidates 70+ fetch patterns
     const api = {
@@ -613,8 +620,7 @@
     window.validationRules = validationRules;
     window.eventDelegation = eventDelegation;
     
-    // Also export API_BASE for backward compatibility
-    window.API_BASE = API_BASE;
+    // API_BASE is already set by app.js or app-utilities.js, don't duplicate
     
     console.log('✅ Utilities module loaded');
 })();
