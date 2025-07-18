@@ -297,7 +297,8 @@ function setupNavigation() {
         navLinks.forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
-                const href = e.target.getAttribute('href');
+                // Use currentTarget to always get the link element, not nested elements
+                const href = e.currentTarget.getAttribute('href');
                 if (href && href.startsWith('#')) {
                     const section = href.substring(1);
                     // Update the URL hash
