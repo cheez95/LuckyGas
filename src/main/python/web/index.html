@@ -904,17 +904,18 @@
         // Dashboard functions
         async function loadDashboard() {
             try {
-                const response = await fetch(`${API_BASE}/dashboard/stats`);
+                // Use the API endpoint directly since API_BASE might not be defined yet
+                const response = await fetch('/api/dashboard/stats');
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const stats = await response.json();
                 
-                // Update dashboard stats
-                document.getElementById('total-clients').textContent = stats.total_clients || 0;
-                document.getElementById('today-deliveries').textContent = stats.today_deliveries || 0;
-                document.getElementById('available-drivers').textContent = stats.available_drivers || 0;
-                document.getElementById('available-vehicles').textContent = stats.available_vehicles || 0;
+                // Update dashboard stats with correct field mappings
+                document.getElementById('total-clients').textContent = stats.overview?.total_clients || 0;
+                document.getElementById('today-deliveries').textContent = stats.today_deliveries?.total || 0;
+                document.getElementById('available-drivers').textContent = stats.overview?.available_drivers || 0;
+                document.getElementById('available-vehicles').textContent = stats.overview?.available_vehicles || 0;
                 
             } catch (error) {
                 console.error('Error loading dashboard stats:', error);

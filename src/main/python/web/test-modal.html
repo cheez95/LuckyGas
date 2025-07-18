@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modal Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-10">
+    <h1 class="text-2xl font-bold mb-4">Modal Function Test</h1>
+    
+    <div class="space-y-4">
+        <button onclick="testModalFunction('showAddClientModal')" class="bg-blue-600 text-white px-4 py-2 rounded">
+            Test showAddClientModal()
+        </button>
+        
+        <button onclick="testModalFunction('showAddDriverModal')" class="bg-blue-600 text-white px-4 py-2 rounded">
+            Test showAddDriverModal()
+        </button>
+        
+        <button onclick="testModalFunction('showAddVehicleModal')" class="bg-blue-600 text-white px-4 py-2 rounded">
+            Test showAddVehicleModal()
+        </button>
+        
+        <button onclick="testModalFunction('showAddDeliveryModal')" class="bg-blue-600 text-white px-4 py-2 rounded">
+            Test showAddDeliveryModal()
+        </button>
+    </div>
+    
+    <div id="results" class="mt-8 p-4 bg-white rounded shadow"></div>
+    
+    <script>
+        function testModalFunction(funcName) {
+            const results = document.getElementById('results');
+            
+            if (typeof window[funcName] === 'function') {
+                results.innerHTML += `<p class="text-green-600">✅ ${funcName} is available and is a function</p>`;
+                try {
+                    // Try to call it
+                    window[funcName]();
+                    results.innerHTML += `<p class="text-green-600">✅ ${funcName}() called successfully</p>`;
+                } catch (error) {
+                    results.innerHTML += `<p class="text-red-600">❌ Error calling ${funcName}(): ${error.message}</p>`;
+                }
+            } else {
+                results.innerHTML += `<p class="text-red-600">❌ ${funcName} is not available or not a function</p>`;
+                results.innerHTML += `<p class="text-gray-600">Type: ${typeof window[funcName]}</p>`;
+            }
+            
+            results.innerHTML += '<hr class="my-2">';
+        }
+        
+        // Check on page load
+        window.addEventListener('load', function() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<h2 class="font-bold mb-2">Initial Check:</h2>';
+            
+            const modalFunctions = [
+                'showAddClientModal',
+                'showAddDriverModal',
+                'showAddVehicleModal',
+                'showAddDeliveryModal'
+            ];
+            
+            modalFunctions.forEach(funcName => {
+                if (typeof window[funcName] === 'function') {
+                    results.innerHTML += `<p class="text-green-600">✅ ${funcName} is available on load</p>`;
+                } else {
+                    results.innerHTML += `<p class="text-red-600">❌ ${funcName} is NOT available on load</p>`;
+                }
+            });
+            
+            results.innerHTML += '<hr class="my-4"><h2 class="font-bold mb-2">Click Test Results:</h2>';
+        });
+    </script>
+</body>
+</html>

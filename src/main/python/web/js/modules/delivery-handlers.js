@@ -119,10 +119,11 @@
                     tbody.removeChild(tbody.firstChild);
                 }
                 
-                const row = document.createElement('tr');
-                const cell = document.createElement('td');
-                cell.colSpan = 8;
-                cell.className = 'px-6 py-4 text-center text-orange-500';
+                const row = window.SecurityUtils.createElement('tr', {}, []);
+                const cell = window.SecurityUtils.createElement('td', {
+                    colSpan: 8,
+                    className: 'px-6 py-4 text-center text-orange-500'
+                }, []);
                 cell.innerHTML = `
                     <div>
                         <p>載入逾時，請重新整理頁面</p>
